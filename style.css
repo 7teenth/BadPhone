@@ -3,7 +3,7 @@
 margin: 0;
 padding: 0;
 box-sizing: content-box;
-font-family: "Monomaniac One";
+font-family: "Oswald";
 color: white;
 text-decoration: none;
 }
@@ -33,6 +33,24 @@ div.menu
     margin-left: 40px;
 
 }
+.button {
+    color: white;
+    background-color: rgba(0, 0, 255, 0);
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer; /* Указываем, что это интерактивный элемент */
+    transition: all 0.3s ease; /* Плавный переход для всех свойств */
+    border: 2px solid rgba(0, 0, 0, 0);
+    /*transition: border-color 0.3s ease;*/
+}
+
+.button:hover {
+    background-color: rgba(0, 0, 139, 0);
+    color: #ff0000;
+    border-color: red;
+
+}
+
 div.site_name
 {
     display: flex;
@@ -59,8 +77,13 @@ div.index
 div.container_main
 {
     background-color: #d8d8d8;
-    height: 263px;
-    width: 100%;
+    padding-top: 50px;
+    height: 220px;
+    width: 93%;
+    display: flex;
+    justify-content: space-between;
+    padding-left: 50px;
+    padding-right: 70px;
 }
 
 div.container_visits
@@ -75,4 +98,112 @@ div.container_stats
     background-color: #d8d8d8;
     height: 400px ; /*Переписать*/
     width: 100%;
+}
+
+.tile_prodaty
+{
+    color: #e8e8e8;
+    background-color: black;
+    /*margin-left: 50px;*/
+    display: inline-block;
+    cursor: pointer;
+    width: 300px;
+    height: 150px;
+    border-radius: 10px;
+    border-width: 10px;
+    border-color: red;
+    padding-left: 30px;
+    padding-top: 20px;
+    font-size: 30px;
+    transition: all 0.3s ease; /* Плавный переход для всех свойств */
+    border: 2px solid rgba(0, 0, 0, 0);
+}
+
+.tile_prodaty:hover
+{
+    background-color: black;
+    border-color: red;
+    font-size: 35px;
+    color: #ffffff;
+}
+
+.tile_znayity
+{
+    color: #e8e8e8;
+    background-color: black;
+    /*margin-left: 50px;*/
+    display: inline-block;
+    cursor: pointer;
+    width: 300px;
+    height: 150px;
+    border-radius: 10px;
+    border-width: 10px;
+    border-color: red;
+    padding-left: 30px;
+    padding-top: 20px;
+    font-size: 30px;
+    transition: all 0.3s ease; /* Плавный переход для всех свойств */
+    border: 2px solid rgba(0, 0, 0, 0);
+}
+
+.tile_znayity:hover
+{
+    background-color: black;
+    border-color: red;
+    font-size: 35px;
+    color: #ffffff;
+}
+
+.tile_vnesty
+{
+    color: #e8e8e8;
+    background-color: black;
+    /*margin-left: 50px;*/
+    display: inline-block;
+    cursor: pointer;
+    width: 300px;
+    height: 150px;
+    border-radius: 10px;
+    border-width: 10px;
+    border-color: red;
+    padding-left: 30px;
+    padding-top: 20px;
+    font-size: 30px;
+    transition: all 0.3s ease; /* Плавный переход для всех свойств */
+    border: 2px solid rgba(0, 0, 0, 0);
+}
+
+.tile_vnesty:hover
+{
+    background-color: black;
+    border-color: red;
+    font-size: 35px;
+    color: #ffffff;
+}
+
+.tile_history
+{
+    color: #e8e8e8;
+    background-color: black;
+    /*margin-left: 50px;*/
+    display: inline-block;
+    cursor: pointer;
+    width: 300px;
+    height: 150px;
+    border-radius: 10px;
+    border-width: 10px;
+    border-color: red;
+    padding-left: 30px;
+    padding-top: 20px;
+    font-size: 30px;
+    transition: all 0.3s ease; /* Плавный переход для всех свойств */
+    border: 2px solid rgba(0, 0, 0, 0);
+}
+
+.tile_history:hover
+{
+    background-color: black;
+    border-color: red;
+    font-size: 35px;
+    color: #ffffff;
 }
