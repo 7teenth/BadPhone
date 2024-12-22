@@ -30,7 +30,7 @@ div.menu
     text-align: center;
     display: flex;
     align-items: center;
-    margin-left: 20px;
+    margin-left: 40px;
 
 }
 div.site_name
@@ -48,6 +48,31 @@ div.clock
     text-align: center;
     display: flex;
     align-items: center;
-    margin-right: 20px;
+    margin-right: 40px;
 
+}
+div.index
+{
+
+}
+
+div.container_main
+{
+    background-color: #d8d8d8;
+    height: 263px;
+    width: 100%;
+}
+
+div.container_visits
+{
+    background-color: #ffffff;
+    height: 263px;
+    width: 100%;
+}
+
+div.container_stats
+{
+    background-color: #d8d8d8;
+    height: 400px ; /*Переписать*/
+    width: 100%;
 }
