@@ -1,1 +1,53 @@
-.
+*
+{
+margin: 0;
+padding: 0;
+box-sizing: content-box;
+font-family: "Monomaniac One";
+color: white;
+text-decoration: none;
+}
+
+div.header
+{
+    background-color: black;
+    display: flex;
+    justify-content: space-between;
+    text-align: center;
+}
+
+div.container
+{
+    background-color: black;
+    width: 200px;
+    height: 100px;
+    margin: 0 auto;
+    justify-content: center;
+
+}
+div.menu
+{
+    text-align: center;
+    display: flex;
+    align-items: center;
+    margin-left: 20px;
+
+}
+div.site_name
+{
+    display: flex;
+    align-items: center;
+    height: 100px;
+    justify-content: center;
+    font-size: 50px;
+    /*margin-left:80px;*/ /*Переписать*/
+}
+
+div.clock
+{
+    text-align: center;
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+
+}
