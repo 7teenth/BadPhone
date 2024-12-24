@@ -207,3 +207,66 @@ div.container_stats
     font-size: 35px;
     color: #ffffff;
 }
+
+
+/*----------------------------------------------------------------------------------------------------------------------
+
+ */
+
+.left_side
+{
+    height: 1080px;
+    width:360px;
+    background-color: dimgray;
+    text-align: center;
+    padding-top: 30px;
+
+
+}
+.vnesty
+{
+    font-size: 30px;
+
+}
+
+.form
+{
+
+}
+
+.form input
+{
+    border-radius: 5px;
+    outline: none;
+    border: 2px solid #000000;
+    box-shadow: 0 0 5px rgba(57, 57, 57, 0.5);
+    color: black;
+}
+
+.form input:focus
+{
+    outline: none;
+    border: 1px solid #ff0000;
+    box-shadow: 0 0 5px rgb(92, 0, 0);
+}
+
+.savebutton
+{
+    background-color: #000000;
+    border-radius: 5px;
+    width: 60px;
+    height: 30px;
+    transition: all 0.3s ease;
+}
+
+.savebutton:hover
+{
+    background-color: #ff0000;
+    border-color: black;
+    border: 2px solid #000000;
+}
+
+.message_status
+{
+padding-top: 10px;
+}
