@@ -40,3 +40,4 @@ document.addEventListener("DOMContentLoaded", function() {
         console.log("Кнопка не найдена.");
     }
 });
+
