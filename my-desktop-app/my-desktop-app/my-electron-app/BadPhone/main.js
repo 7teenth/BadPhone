@@ -15,3 +15,4 @@ app.on('ready', () => {
     mainWindow.loadFile('index.html'); // Если у вас есть локальный файл
     // mainWindow.loadURL('https://example.com'); // Или укажите URL сайта
 });
+
