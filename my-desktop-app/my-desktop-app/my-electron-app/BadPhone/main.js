@@ -4,8 +4,7 @@ let mainWindow;
 
 app.on('ready', () => {
     mainWindow = new BrowserWindow({
-        width: 800,
-        height: 600,
+        fullscreen: true, // Включает полноэкранный режим
         webPreferences: {
             nodeIntegration: true, // Для использования Node.js внутри приложения
         },
