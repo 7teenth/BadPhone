@@ -15,3 +15,4 @@ app.on('ready', () => {
     // mainWindow.loadURL('https://example.com'); // Или укажите URL сайта
 });
 
+
