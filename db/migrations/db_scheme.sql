@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS products (
   purchase_price REAL,
   retail_price REAL,
   quantity INTEGER,
-  is_deleted BOOLEAN DEFAULT false
+  is_deleted BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
