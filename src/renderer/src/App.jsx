@@ -4,9 +4,7 @@ function App() {
   return (
     <>
       <div>
-        <a target="_blank" rel="noreferrer" onClick={ipcHandle}>
-          Send IPC
-        </a>
+        <button onClick={ipcHandle}>Send IPC</button>
       </div>
     </>
   );
