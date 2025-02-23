@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT CHECK(role IN ('admin', 'worker')),
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -22,14 +23,15 @@ CREATE TABLE IF NOT EXISTS products (
   category_id INTEGER,
   name TEXT NOT NULL,
   description TEXT,
-  barcode INTEGER,
-  article TEXT,
+  barcode TEXT UNIQUE,
+  article TEXT UNIQUE,
   purchase_price REAL,
   retail_price REAL,
   quantity INTEGER,
+  is_deleted BOOLEAN DEFAULT false
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (category_id) REFERENCES categories(id)
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS visits (
@@ -56,21 +58,21 @@ CREATE TABLE IF NOT EXISTS visit_positions (
 
 -- Triggers
 CREATE TRIGGER IF NOT EXISTS update_users_updated_at
-AFTER UPDATE ON users
+BEFORE UPDATE ON users
 FOR EACH ROW
 BEGIN
   UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS update_products_updated_at
-AFTER UPDATE ON products
+BEFORE UPDATE ON products
 FOR EACH ROW
 BEGIN
   UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS update_visits_updated_at
-AFTER UPDATE ON visits
+BEFORE UPDATE ON visits
 FOR EACH ROW
 BEGIN
   UPDATE visits SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
