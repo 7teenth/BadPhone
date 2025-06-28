@@ -48,11 +48,12 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
     dailyStats.forEach((day) => {
       Object.entries(day.sellers).forEach(([sellerId, seller]) => {
+        const typedSeller = seller as { name: string; amount: number; salesCount: number }
         if (!sellerStats[sellerId]) {
-          sellerStats[sellerId] = { name: seller.name, amount: 0, salesCount: 0 }
+          sellerStats[sellerId] = { name: typedSeller.name, amount: 0, salesCount: 0 }
         }
-        sellerStats[sellerId].amount += seller.amount
-        sellerStats[sellerId].salesCount += seller.salesCount
+        sellerStats[sellerId].amount += typedSeller.amount
+        sellerStats[sellerId].salesCount += typedSeller.salesCount
       })
     })
 
@@ -185,19 +186,22 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-gray-700">Продавці:</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {Object.entries(day.sellers).map(([sellerId, seller]) => (
-                              <div key={sellerId} className="bg-gray-50 rounded p-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm font-medium">{seller.name}</span>
-                                  <Badge variant="secondary" className="text-xs">
-                                    {seller.salesCount} продажів
-                                  </Badge>
+                            {Object.entries(day.sellers).map(([sellerId, seller]) => {
+                              const typedSeller = seller as { name: string; amount: number; salesCount: number }
+                              return (
+                                <div key={sellerId} className="bg-gray-50 rounded p-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium">{typedSeller.name}</span>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {typedSeller.salesCount} продажів
+                                    </Badge>
+                                  </div>
+                                  <div className="text-sm text-green-600 font-medium">
+                                    {formatCurrency(typedSeller.amount)}
+                                  </div>
                                 </div>
-                                <div className="text-sm text-green-600 font-medium">
-                                  {formatCurrency(seller.amount)}
-                                </div>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         </div>
                       </div>
