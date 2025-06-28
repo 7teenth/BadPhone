@@ -17,8 +17,11 @@ import { UsersManagement } from "./components/users-management"
 
 type Page = "main" | "catalog" | "sell" | "find" | "admin" | "sales-history" | "users"
 
-export default function BadPhoneApp() {
+type UserRole = "seller" | "store_manager" | "super_admin" | "owner"
+
+export default function MainPage() {
   const [currentPage, setCurrentPage] = useState<Page>("main")
+
   const {
     currentTime,
     visits,
@@ -34,7 +37,22 @@ export default function BadPhoneApp() {
     currentStore,
     isOnline,
     logout,
-  } = useApp()
+  } = useApp() as {
+    currentTime: string
+    visits: any[]
+    totalSalesAmount: number
+    workingHours: number
+    workingMinutes: number
+    startShift: () => void
+    endShift: () => void
+    isShiftActive: boolean
+    getHourlyEarnings: () => number
+    isAuthenticated: boolean
+    currentUser: { name: string; role: UserRole } | null
+    currentStore: { name: string } | null
+    isOnline: boolean
+    logout: () => void
+  }
 
   // Если пользователь не авторизован, показываем страницу входа
   if (!isAuthenticated) {
