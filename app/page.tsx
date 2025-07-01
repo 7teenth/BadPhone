@@ -10,14 +10,14 @@ import { ProductCatalog } from "./components/product-catalog"
 import SellPage from "./components/sell-page"
 import { FindProductPage } from "./components/find-product-page"
 import { AdminDashboard } from "./components/admin-dashboard"
-import { LoginPage } from "./components/auth/login-page"
+import LoginPage from "./components/auth/login-page"
 import { useApp } from "./context/app-context"
 import { SalesHistory } from "./components/sales-history"
 import { UsersManagement } from "./components/users-management"
 
 type Page = "main" | "catalog" | "sell" | "find" | "admin" | "sales-history" | "users"
 
-type UserRole = "seller" | "store_manager" | "super_admin" | "owner"
+type UserRole = "seller" | "owner"
 
 export default function MainPage() {
   const [currentPage, setCurrentPage] = useState<Page>("main")
@@ -176,7 +176,7 @@ export default function MainPage() {
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
             <span className="text-sm">{currentUser?.name}</span>
-            {currentUser?.role === "super_admin" && (
+            {currentUser?.role === "owner" && (
               <Badge className="bg-purple-600 text-white text-xs">Супер Адмін</Badge>
             )}
           </div>
@@ -259,11 +259,11 @@ export default function MainPage() {
             {currentUser?.role === "seller" && (
               <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Тільки власник</Badge>
             )}
-            {!isOnline && (currentUser?.role === "owner" || currentUser?.role === "super_admin") && (
+            {!isOnline && (currentUser?.role === "seller" || currentUser?.role === "owner") && (
               <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Офлайн</Badge>
             )}
           </Button>
-          {(currentUser?.role === "owner" || currentUser?.role === "super_admin") && (
+          {(currentUser?.role === "seller" || currentUser?.role === "owner") && (
             <Button
               onClick={handleAdminPanel}
               className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"

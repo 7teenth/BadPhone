@@ -3,12 +3,12 @@ ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner', 'seller'));
 
 -- Удаляем супер-админа
-DELETE FROM users WHERE role = 'super_admin';
+DELETE FROM users WHERE role = 'owner';
 
 -- Добавляем поле payment_method в таблицу продаж
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'terminal'));
 
--- Обновляем политики безопасности (убираем упоминания super_admin)
+-- Обновляем политики безопасности (убираем упоминания owner)
 
 -- Политики для stores
 DROP POLICY IF EXISTS "Users can view stores" ON stores;

@@ -1,15 +1,12 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Plus, Trash2, User, UserPlus, AlertCircle, CheckCircle } from "lucide-react"
 import { useApp } from "../context/app-context"
 
@@ -24,12 +21,15 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
     login: "",
     password: "",
     name: "",
-    role: "seller" as "owner" | "seller",
+    // Роль убираем, всегда seller
   })
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  // Проверяем, есть ли уже владелец
+  const ownerExists = users.some(user => user.role === "owner")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,7 +50,14 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
     }
 
     try {
-      const success = await register(formData.login, formData.password, formData.name, formData.role, currentStore.id)
+      // Всегда добавляем с ролью seller
+      const success = await register(
+        formData.login.trim(),
+        formData.password,
+        formData.name.trim(),
+        "seller",
+        currentStore.id
+      )
 
       if (success) {
         setSuccess("Користувач успішно доданий!")
@@ -58,13 +65,13 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
           login: "",
           password: "",
           name: "",
-          role: "seller",
         })
         setShowAddForm(false)
       } else {
         setError("Користувач з таким логіном вже існує")
       }
     } catch (error) {
+      console.error("Помилка при додаванні користувача:", error)
       setError("Помилка при додаванні користувача")
     } finally {
       setIsLoading(false)
@@ -84,6 +91,7 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
         setError("Помилка при видаленні користувача")
       }
     } catch (error) {
+      console.error("Помилка при видаленні користувача:", error)
       setError("Помилка при видаленні користувача")
     } finally {
       setIsLoading(false)
@@ -98,7 +106,6 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
     })
   }
 
-  // Проверяем права доступа
   if (currentUser?.role !== "owner") {
     return (
       <div className="min-h-screen bg-gray-200">
@@ -137,7 +144,7 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
           <Button
             onClick={() => setShowAddForm(!showAddForm)}
             className="bg-black hover:bg-gray-800 text-white"
-            disabled={!isOnline}
+            disabled={!isOnline || isLoading}
           >
             <Plus className="h-4 w-4 mr-2" />
             Додати користувача
@@ -146,14 +153,14 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
 
         {/* Alerts */}
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
         {success && (
-          <Alert className="border-green-200 bg-green-50">
+          <Alert className="border-green-200 bg-green-50 flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">{success}</AlertDescription>
           </Alert>
@@ -179,6 +186,7 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Ім'я користувача"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   <div className="space-y-2">
@@ -189,37 +197,22 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
                       onChange={(e) => setFormData({ ...formData, login: e.target.value })}
                       placeholder="Логін для входу"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Пароль *</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="••••••••"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Роль *</Label>
-                    <Select
-                      value={formData.role}
-                      onValueChange={(value: "owner" | "seller") => setFormData({ ...formData, role: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="seller">Продавець</SelectItem>
-                        <SelectItem value="owner">Власник</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Пароль *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="••••••••"
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
 
                 <div className="flex gap-4">
@@ -232,6 +225,7 @@ export function UsersManagement({ onBack }: UsersManagementProps) {
                     variant="outline"
                     onClick={() => setShowAddForm(false)}
                     className="bg-transparent"
+                    disabled={isLoading}
                   >
                     Скасувати
                   </Button>

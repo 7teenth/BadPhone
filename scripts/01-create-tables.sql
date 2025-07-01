@@ -15,7 +15,7 @@ CREATE TABLE users (
     login VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    role VARCHAR(20) CHECK (role IN ('super_admin', 'store_manager', 'seller')) NOT NULL,
+    role VARCHAR(20) CHECK (role IN ('owner', 'seller')) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

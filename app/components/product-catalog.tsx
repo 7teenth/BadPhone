@@ -140,8 +140,7 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
   }
 
   // Проверяем права доступа
-  const canManageProducts = currentUser?.role === "owner" || currentUser?.role === "super_admin"
-
+  const canManageProducts = currentUser?.role
   if (!canManageProducts) {
     return (
       <div className="min-h-screen bg-gray-200">

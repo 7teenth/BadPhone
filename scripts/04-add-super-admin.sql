@@ -1,14 +1,14 @@
--- Добавляем роль super_admin
+-- Добавляем роль owner
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner', 'seller', 'super_admin'));
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner', 'seller'));
 
 -- Создаем супер-администратора (общий владелец)
 INSERT INTO users (id, store_id, login, password_hash, name, role) VALUES 
-    ('550e8400-e29b-41d4-a716-446655440000', NULL, 'admin', '123456', 'Супер Адміністратор', 'super_admin')
+    ('550e8400-e29b-41d4-a716-446655440000', NULL, 'admin', '123456', 'Супер Адміністратор', 'owner')
 ON CONFLICT (login) DO UPDATE SET 
     store_id = NULL,
-    name = 'Супер Адміністратор',
-    role = 'super_admin';
+    name = 'Власник',
+    role = 'owner';
 
 -- Обновляем политики безопасности для супер-администратора
 
@@ -20,7 +20,7 @@ CREATE POLICY "Users can view stores" ON stores
         EXISTS (
             SELECT 1 FROM users 
             WHERE login = current_setting('app.current_user_login', true) 
-            AND role = 'super_admin'
+            AND role = 'owner'
         )
         OR
         -- Обычные пользователи видят только свой магазин
@@ -39,7 +39,7 @@ CREATE POLICY "Users can view users" ON users
         EXISTS (
             SELECT 1 FROM users 
             WHERE login = current_setting('app.current_user_login', true) 
-            AND role = 'super_admin'
+            AND role = 'owner'
         )
         OR
         -- Обычные пользователи видят только пользователей своего магазина
@@ -58,7 +58,7 @@ CREATE POLICY "Users can manage products" ON products
         EXISTS (
             SELECT 1 FROM users 
             WHERE login = current_setting('app.current_user_login', true) 
-            AND role = 'super_admin'
+            AND role = 'owner'
         )
         OR
         -- Владельцы управляют товарами своего магазина
@@ -84,7 +84,7 @@ CREATE POLICY "Users can manage sales" ON sales
         EXISTS (
             SELECT 1 FROM users 
             WHERE login = current_setting('app.current_user_login', true) 
-            AND role = 'super_admin'
+            AND role = 'owner'
         )
         OR
         -- Обычные пользователи видят продажи своего магазина
@@ -103,7 +103,7 @@ CREATE POLICY "Users can manage visits" ON visits
         EXISTS (
             SELECT 1 FROM users 
             WHERE login = current_setting('app.current_user_login', true) 
-            AND role = 'super_admin'
+            AND role = 'owner'
         )
         OR
         -- Обычные пользователи видят визиты своего магазина
@@ -122,7 +122,7 @@ CREATE POLICY "Users can manage shifts" ON shifts
         EXISTS (
             SELECT 1 FROM users 
             WHERE login = current_setting('app.current_user_login', true) 
-            AND role = 'super_admin'
+            AND role = 'owner'
         )
         OR
         -- Обычные пользователи видят смены своего магазина
