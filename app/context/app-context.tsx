@@ -217,6 +217,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUsers(usersWithStores)
       }
 
+      await loadProducts()
+
       if (currentUser) {
         if (currentUser.role === "owner") {
           const { data: productsData } = await supabase.from("products").select("*")
@@ -268,67 +270,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const login = async (login: string, password: string): Promise<boolean> => {
-  if (!isOnline) return false
+  const loadProducts = async () => {
+  if (!isOnline || !currentUser) return; // если currentUser ещё null — продукты не грузятся
 
-  const hashedPassword = hashPassword(password)
-  const cleanLogin = login.trim().toLowerCase()
+console.log("loadProducts currentUser:", currentUser);
 
-  console.log("Login attempt:", cleanLogin, "Password hash:", hashedPassword)
 
   try {
-    const { data: userData, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("login", cleanLogin)
-      .maybeSingle()
+    let data, error;
 
-    console.log("Supabase response:", { userData, error })
-
-    if (error) {
-      console.error("Ошибка при запросе пользователя:", error)
-      return false
+    if (currentUser.role === "owner") {
+      const res = await supabase.from("products").select("*");
+      console.log("loadProducts supabase response:", res);
+      data = res.data;
+      error = res.error;
+    } else if (currentUser.store_id) {
+      const res = await supabase.from("products").select("*").eq("store_id", currentUser.store_id);
+      data = res.data;
+      error = res.error;
     }
 
-    if (!userData) {
-      console.error("Пользователь не найден с таким логином")
-      return false
+    if (error) throw error;
+
+    if (data) {
+      setProducts(data);
     }
-
-    if (userData.password_hash !== hashedPassword) {
-      console.error("Неверный пароль")
-      return false
-    }
-
-    // Получаем магазин если есть
-    let storeData = null
-    if (userData.store_id) {
-      const { data: store, error: storeError } = await supabase
-        .from("stores")
-        .select("*")
-        .eq("id", userData.store_id)
-        .maybeSingle()
-
-      if (storeError) {
-        console.error("Ошибка при загрузке магазина пользователя:", storeError)
-      } else {
-        storeData = store
-      }
-    }
-
-    const userWithStore = { ...userData, store: storeData }
-
-    setCurrentUser(userWithStore)
-    setCurrentStore(storeData)
-    setIsAuthenticated(true)
-
-    return true
   } catch (error) {
-    console.error("Ошибка логина:", error)
-    return false
+    console.error("Error loading products:", error);
   }
 }
 
+
+  const login = async (login: string, password: string): Promise<boolean> => {
+    if (!isOnline) return false
+
+    const hashedPassword = hashPassword(password)
+    const cleanLogin = login.trim().toLowerCase()
+
+    try {
+      const { data: userData, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("login", cleanLogin)
+        .maybeSingle()
+
+      if (error || !userData) {
+        console.error("Login error or user not found:", error)
+        return false
+      }
+
+      if (userData.password_hash !== hashedPassword) {
+        console.error("Invalid password")
+        return false
+      }
+
+      let storeData = null
+      if (userData.store_id) {
+        const { data: store, error: storeError } = await supabase
+          .from("stores")
+          .select("*")
+          .eq("id", userData.store_id)
+          .maybeSingle()
+
+        if (storeError) {
+          console.error("Error loading user store:", storeError)
+        } else {
+          storeData = store
+        }
+      }
+
+      const userWithStore = { ...userData, store: storeData }
+
+      setCurrentUser(userWithStore)
+      setCurrentStore(storeData)
+      setIsAuthenticated(true)
+
+      console.log("User set, now load data")
+
+      await loadData()
+
+      return true
+    } catch (error) {
+      console.error("Login failed:", error)
+      return false
+    }
+  }
 
   const logout = () => {
     setCurrentUser(null)
@@ -343,57 +369,176 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const register = async (
-  login: string,
-  password: string,
-  name: string,
-  role: "owner" | "seller",
-  storeId: string,
-): Promise<boolean> => {
-  if (!isOnline) return false
+    login: string,
+    password: string,
+    name: string,
+    role: "owner" | "seller",
+    storeId: string | null,
+  ): Promise<boolean> => {
+    if (!isOnline) return false
 
-  const hashedPassword = hashPassword(password)
-  const store_id_to_insert = typeof storeId === "string" && storeId.trim() !== "" ? storeId : null
+    const hashedPassword = hashPassword(password)
+    const store_id_to_insert = typeof storeId === "string" && storeId.trim() !== "" ? storeId : null
 
+    try {
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("id")
+        .eq("login", login)
+        .maybeSingle()
+
+      if (existingUser) {
+        console.error("User already exists")
+        return false
+      }
+
+      const { error: insertError } = await supabase.from("users").insert({
+        login,
+        password_hash: hashedPassword,
+        name,
+        role: "seller", // жёстко seller
+        store_id: store_id_to_insert,
+      })
+
+      if (insertError) {
+        console.error("Insert user error:", insertError)
+        return false
+      }
+
+      await loadData()
+      return true
+    } catch (error) {
+      console.error("Registration error:", error)
+      return false
+    }
+  }
+
+  const startShift = async () => {
+    if (!isOnline || !currentUser || currentShift) return
+
+    try {
+      const now = new Date().toISOString()
+      const { data, error } = await supabase
+        .from("shifts")
+        .insert({
+          store_id: currentUser.store_id || null,
+          user_id: currentUser.id,
+          start_time: now,
+          total_sales: 0,
+        })
+        .select()
+        .maybeSingle()
+
+      if (error) {
+        console.error("Error starting shift:", error)
+        return
+      }
+
+      setCurrentShift(data || null)
+    } catch (err) {
+      console.error("Failed to start shift:", err)
+    }
+  }
+
+  const endShift = async () => {
+    if (!isOnline || !currentShift) return
+
+    try {
+      const now = new Date().toISOString()
+      const { error } = await supabase.from("shifts").update({ end_time: now }).eq("id", currentShift.id)
+
+      if (error) {
+        console.error("Error ending shift:", error)
+        return
+      }
+
+      setCurrentShift(null)
+    } catch (err) {
+      console.error("Failed to end shift:", err)
+    }
+  }
+
+  // --- Реализация addProduct ---
+
+  // Добавим store_id в параметрах
+const addProduct = async (
+  product: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id: string | null },
+): Promise<void> => {
+  if (!isOnline || !currentUser) return
 
   try {
-    const { data: existingUser } = await supabase
-      .from("users")
-      .select("id")
-      .eq("login", login)
+    const { store_id, ...rest } = product
+
+    // Проверка: если store_id не передали, то fallback на currentUser.store_id
+    const actualStoreId = store_id || currentUser.store_id || null
+
+    const { data, error } = await supabase
+      .from("products")
+      .insert([{ ...rest, store_id: actualStoreId }])
+      .select()
       .maybeSingle()
 
-    if (existingUser) {
-      console.error("User already exists")
-      return false
+    if (error) {
+      console.error("Error adding product:", error)
+      return
     }
 
-    const { error: insertError } = await supabase.from("users").insert({
-      login,
-      password_hash: hashedPassword,
-      name,
-      role: "seller", // жёстко "seller"
-      store_id: store_id_to_insert,
-    })
-
-    if (insertError) {
-      console.error("Insert user error:", insertError)
-      return false
+    if (data) {
+      setProducts((prev) => [...prev, data])
     }
-
-    await loadData()
-    return true
   } catch (error) {
-    console.error("Registration error:", error)
-    return false
+    console.error("addProduct failed:", error)
   }
 }
 
 
-  // Остальные методы (addSale, addProduct, updateProduct, deleteProduct, deleteUser, startShift, endShift,
-  // isShiftActive, getHourlyEarnings, getDailySalesStats, getTotalStats) оставляем без изменений
-  // (Если хочешь — могу вставить их сюда тоже)
+  // --- Реализация updateProduct ---
 
-  // Для краткости дальше только value и return:
+  const updateProduct = async (id: string, product: Partial<Product>): Promise<void> => {
+    if (!isOnline) return
+
+    try {
+      const { data, error } = await supabase.from("products").update(product).eq("id", id).select().maybeSingle()
+
+      if (error) {
+        console.error("Error updating product:", error)
+        return
+      }
+
+      if (data) {
+        setProducts((prev) => prev.map((p) => (p.id === id ? data : p)))
+      }
+    } catch (error) {
+      console.error("updateProduct failed:", error)
+    }
+  }
+
+  // --- Реализация deleteProduct ---
+
+  const deleteProduct = async (id: string): Promise<void> => {
+    if (!isOnline) return
+
+    try {
+      const { error } = await supabase.from("products").delete().eq("id", id)
+
+      if (error) {
+        console.error("Error deleting product:", error)
+        return
+      }
+
+      setProducts((prev) => prev.filter((p) => p.id !== id))
+    } catch (error) {
+      console.error("deleteProduct failed:", error)
+    }
+  }
+
+  // Заглушки для остальных функций
+
+  const addSale = async () => {}
+  const deleteUser = async (userId: string) => false
+  const getHourlyEarnings = () => 0
+  const getDailySalesStats = () => []
+  const getTotalStats = () => ({})
 
   const value: AppContextType = {
     currentTime,
@@ -410,20 +555,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentStore,
     isAuthenticated,
     isOnline,
-    addSale: async () => {},
-    addProduct: async () => {},
-    updateProduct: async () => {},
-    deleteProduct: async () => {},
-    deleteUser: async () => false,
-    startShift: async () => {},
-    endShift: async () => {},
+    addSale,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    deleteUser,
+    startShift,
+    endShift,
     isShiftActive: currentShift !== null,
-    getHourlyEarnings: () => 0,
+    getHourlyEarnings,
     login,
     logout,
     register,
-    getDailySalesStats: () => [],
-    getTotalStats: () => ({}),
+    getDailySalesStats,
+    getTotalStats,
     loadData,
   }
 

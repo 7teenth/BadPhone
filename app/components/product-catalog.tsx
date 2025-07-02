@@ -5,22 +5,22 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Plus, Search, Edit, Trash2, Scan } from "lucide-react"
+import { ArrowLeft, Search, Edit, Trash2, Scan } from "lucide-react"
 import { ProductForm } from "./product-form"
 import { DeleteConfirmDialog } from "./delete-confirm-dialog"
 import { BarcodeScanner } from "./barcode-scanner"
 import { useApp } from "../context/app-context"
 
 export interface Product {
-  id: number
+  id: string
   name: string
   category: string
   price: number
   quantity: number
-  description: string
+  description?: string
   brand: string
   model: string
-  createdAt: Date
+  created_at: string // ISO string
   barcode?: string
 }
 
@@ -29,61 +29,14 @@ interface ProductCatalogProps {
 }
 
 export function ProductCatalog({ onBack }: ProductCatalogProps) {
-  const { currentUser } = useApp()
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: 1,
-      name: "Чохол iPhone 15 Pro",
-      category: "Чохли",
-      price: 450,
-      quantity: 25,
-      description: "Силіконовий чохол для iPhone 15 Pro",
-      brand: "Apple",
-      model: "iPhone 15 Pro",
-      createdAt: new Date("2024-01-15"),
-      barcode: "12345678901",
-    },
-    {
-      id: 2,
-      name: "Зарядний кабель USB-C",
-      category: "Зарядки",
-      price: 280,
-      quantity: 50,
-      description: "Швидкий зарядний кабель USB-C 1м",
-      brand: "Generic",
-      model: "USB-C",
-      createdAt: new Date("2024-01-10"),
-    },
-    {
-      id: 3,
-      name: "Навушники AirPods Pro",
-      category: "Навушники",
-      price: 8500,
-      quantity: 8,
-      description: "Бездротові навушники з шумозаглушенням",
-      brand: "Apple",
-      model: "AirPods Pro 2",
-      createdAt: new Date("2024-01-20"),
-    },
-    {
-      id: 4,
-      name: "Захисне скло Samsung S24",
-      category: "Захисні скла",
-      price: 320,
-      quantity: 0,
-      description: "Загартоване скло для Samsung Galaxy S24",
-      brand: "Samsung",
-      model: "Galaxy S24",
-      createdAt: new Date("2024-01-12"),
-    },
-  ])
+  const { products, addProduct, updateProduct, deleteProduct, currentUser, stores } = useApp()
 
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("Всі")
   const [showProductForm, setShowProductForm] = useState(false)
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [deleteProduct, setDeleteProduct] = useState<Product | null>(null)
+  const [deleteProductState, setDeleteProductState] = useState<Product | null>(null)
 
   const categories = ["Всі", "Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"]
 
@@ -97,35 +50,27 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     return matchesSearch && matchesCategory
   })
 
-  const handleAddProduct = (productData: Omit<Product, "id" | "createdAt">) => {
-    const newProduct: Product = {
-      ...productData,
-      id: Math.max(...products.map((p) => p.id), 0) + 1,
-      createdAt: new Date(),
-    }
-    setProducts([...products, newProduct])
+  const handleAddProduct = async (productData: Omit<Product, "id" | "created_at">) => {
+    await addProduct(productData)
     setShowProductForm(false)
   }
 
-  const handleEditProduct = (productData: Omit<Product, "id" | "createdAt">) => {
+  const handleEditProduct = async (productData: Omit<Product, "id" | "created_at">) => {
     if (editingProduct) {
-      const updatedProducts = products.map((p) =>
-        p.id === editingProduct.id ? { ...productData, id: editingProduct.id, createdAt: editingProduct.createdAt } : p,
-      )
-      setProducts(updatedProducts)
+      await updateProduct(editingProduct.id, productData)
       setEditingProduct(null)
       setShowProductForm(false)
     }
   }
 
   const handleDeleteProduct = (product: Product) => {
-    setDeleteProduct(product)
+    setDeleteProductState(product)
   }
 
-  const confirmDelete = () => {
-    if (deleteProduct) {
-      setProducts(products.filter((p) => p.id !== deleteProduct.id))
-      setDeleteProduct(null)
+  const confirmDelete = async () => {
+    if (deleteProductState) {
+      await deleteProduct(deleteProductState.id)
+      setDeleteProductState(null)
     }
   }
 
@@ -134,13 +79,16 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     setShowProductForm(true)
   }
 
-  const handleBarcodeProductAdded = (productData: Omit<Product, "id" | "createdAt">) => {
-    handleAddProduct(productData)
-    setShowBarcodeScanner(false)
-  }
+  const handleBarcodeProductAdded = (productData: Omit<Product, "id" | "created_at"> & { store_id: string | null }) => {
+  handleAddProduct(productData)
+  setShowBarcodeScanner(false)
+}
 
-  // Проверяем права доступа
-  const canManageProducts = currentUser?.role
+
+  console.log("products from context:", products)
+
+  // Проверяем права доступа (например, только "owner" может управлять)
+  const canManageProducts = currentUser?.role === "owner"
   if (!canManageProducts) {
     return (
       <div className="min-h-screen bg-gray-200">
@@ -200,10 +148,6 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
           <div className="flex gap-2">
             <Button onClick={() => setShowBarcodeScanner(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
               <Scan className="h-4 w-4 mr-2" />
-              Штрих-код
-            </Button>
-            <Button onClick={() => setShowProductForm(true)} className="bg-black hover:bg-gray-800 text-white">
-              <Plus className="h-4 w-4 mr-2" />
               Додати товар
             </Button>
           </div>
@@ -226,6 +170,13 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredProducts.length === 0 && (
+            <div className="text-center py-12 col-span-full">
+              <p className="text-gray-500 text-lg">Товари не знайдено</p>
+              <p className="text-gray-400">Спробуйте змінити критерії пошуку</p>
+            </div>
+          )}
+
           {filteredProducts.map((product) => (
             <Card key={product.id} className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
@@ -265,19 +216,12 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
                 </div>
                 <div className="flex justify-between items-center pt-2">
                   <span className="text-2xl font-bold text-green-600">{product.price} ₴</span>
-                  <span className="text-xs text-gray-500">{product.createdAt.toLocaleDateString("uk-UA")}</span>
+                  <span className="text-xs text-gray-500">{product.created_at ? new Date(product.created_at).toLocaleDateString("uk-UA") : "Дата відсутня"}</span>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-
-        {filteredProducts.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">Товари не знайдено</p>
-            <p className="text-gray-400">Спробуйте змінити критерії пошуку</p>
-          </div>
-        )}
 
         {/* Statistics */}
         <div className="bg-white rounded-lg p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -298,15 +242,21 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
 
       {/* Barcode Scanner Modal */}
       {showBarcodeScanner && (
-        <BarcodeScanner onClose={() => setShowBarcodeScanner(false)} onProductAdded={handleBarcodeProductAdded} />
-      )}
+  <BarcodeScanner
+    onClose={() => setShowBarcodeScanner(false)}
+    onProductAdded={handleBarcodeProductAdded}
+    stores={stores || []}
+    currentUserStoreId={currentUser?.store_id || null}
+  />
+)}
+
 
       {/* Delete Confirmation Dialog */}
-      {deleteProduct && (
+      {deleteProductState && (
         <DeleteConfirmDialog
-          product={deleteProduct}
+          product={deleteProductState}
           onConfirm={confirmDelete}
-          onCancel={() => setDeleteProduct(null)}
+          onCancel={() => setDeleteProductState(null)}
         />
       )}
     </div>

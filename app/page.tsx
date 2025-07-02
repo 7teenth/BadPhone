@@ -5,7 +5,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Play, Square, Clock, LogOut, User, BarChart3, Store, Wifi, WifiOff } from "lucide-react"
+import {
+  Play,
+  Square,
+  Clock,
+  LogOut,
+  User,
+  BarChart3,
+  Store,
+  Wifi,
+  WifiOff,
+} from "lucide-react"
 import { ProductCatalog } from "./components/product-catalog"
 import SellPage from "./components/sell-page"
 import { FindProductPage } from "./components/find-product-page"
@@ -15,7 +25,14 @@ import { useApp } from "./context/app-context"
 import { SalesHistory } from "./components/sales-history"
 import { UsersManagement } from "./components/users-management"
 
-type Page = "main" | "catalog" | "sell" | "find" | "admin" | "sales-history" | "users"
+type Page =
+  | "main"
+  | "catalog"
+  | "sell"
+  | "find"
+  | "admin"
+  | "sales-history"
+  | "users"
 
 type UserRole = "seller" | "owner"
 
@@ -54,52 +71,23 @@ export default function MainPage() {
     logout: () => void
   }
 
-  // Если пользователь не авторизован, показываем страницу входа
-  if (!isAuthenticated) {
-    return <LoginPage />
-  }
+  if (!isAuthenticated) return <LoginPage />
 
   const handleSell = () => {
-    if (!isShiftActive) {
-      startShift()
-    }
+    if (!isShiftActive) startShift()
     setCurrentPage("sell")
   }
 
-  const handleFindProduct = () => {
-    setCurrentPage("find")
-  }
-
-  const handleSalesHistory = () => {
-    setCurrentPage("sales-history")
-  }
-
-  const handleUsersManagement = () => {
-    setCurrentPage("users")
-  }
-
-  const handleAddProduct = () => {
-    setCurrentPage("catalog")
-  }
-
-  const handleAdminPanel = () => {
-    setCurrentPage("admin")
-  }
-
-  const handleVisitClick = (visitId: string) => {
-    console.log(`Візит ${visitId} clicked`)
-  }
-
-  const handleBackToMain = () => {
-    setCurrentPage("main")
-  }
+  const handleFindProduct = () => setCurrentPage("find")
+  const handleSalesHistory = () => setCurrentPage("sales-history")
+  const handleUsersManagement = () => setCurrentPage("users")
+  const handleAddProduct = () => setCurrentPage("catalog")
+  const handleAdminPanel = () => setCurrentPage("admin")
+  const handleBackToMain = () => setCurrentPage("main")
 
   const handleShiftToggle = () => {
-    if (isShiftActive) {
-      endShift()
-    } else {
-      startShift()
-    }
+    if (isShiftActive) endShift()
+    else startShift()
   }
 
   const handleLogout = () => {
@@ -107,28 +95,19 @@ export default function MainPage() {
     setCurrentPage("main")
   }
 
-  if (currentPage === "sales-history") {
-    return <SalesHistory onBack={handleBackToMain} />
-  }
-
-  if (currentPage === "users") {
-    return <UsersManagement onBack={handleBackToMain} />
-  }
-
-  if (currentPage === "catalog") {
-    return <ProductCatalog onBack={handleBackToMain} />
-  }
-
-  if (currentPage === "sell") {
-    return <SellPage onBack={handleBackToMain} />
-  }
-
-  if (currentPage === "find") {
-    return <FindProductPage onBack={handleBackToMain} />
-  }
-
-  if (currentPage === "admin") {
-    return <AdminDashboard onBack={handleBackToMain} />
+  switch (currentPage) {
+    case "sales-history":
+      return <SalesHistory onBack={handleBackToMain} />
+    case "users":
+      return <UsersManagement onBack={handleBackToMain} />
+    case "catalog":
+      return <ProductCatalog onBack={handleBackToMain} />
+    case "sell":
+      return <SellPage onBack={handleBackToMain} />
+    case "find":
+      return <FindProductPage onBack={handleBackToMain} />
+    case "admin":
+      return <AdminDashboard onBack={handleBackToMain} />
   }
 
   return (
@@ -167,12 +146,16 @@ export default function MainPage() {
         </div>
 
         <div className="flex items-center gap-6">
-          {/* Connection Status */}
+          {/* Статус підключення */}
           <div className="flex items-center gap-2">
-            {isOnline ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-red-400" />}
+            {isOnline ? (
+              <Wifi className="h-4 w-4 text-green-400" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-red-400" />
+            )}
           </div>
 
-          {/* User Info */}
+          {/* Інформація про користувача */}
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
             <span className="text-sm">{currentUser?.name}</span>
@@ -181,7 +164,7 @@ export default function MainPage() {
             )}
           </div>
 
-          {/* Working Time */}
+          {/* Час на зміні */}
           {isShiftActive && (
             <div className="flex items-center gap-2 text-sm bg-gray-800 px-3 py-1 rounded">
               <Clock className="h-4 w-4" />
@@ -191,17 +174,24 @@ export default function MainPage() {
             </div>
           )}
 
-          {/* Current Time */}
-          <div className="text-lg font-mono bg-gray-800 px-3 py-1 rounded">{currentTime}</div>
+          {/* Поточний час */}
+          <div className="text-lg font-mono bg-gray-800 px-3 py-1 rounded">
+            {currentTime}
+          </div>
 
-          {/* Logout Button */}
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-white hover:bg-gray-800 px-3">
+          {/* Кнопка виходу */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-white hover:bg-gray-800 px-3"
+          >
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
-      {/* Offline Warning */}
+      {/* Попередження офлайн */}
       {!isOnline && (
         <div className="bg-yellow-600 text-white px-6 py-2 text-center text-sm">
           <div className="flex items-center justify-center gap-2">
@@ -211,32 +201,38 @@ export default function MainPage() {
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Основний контент */}
       <div className="p-6 space-y-6">
-        {/* Shift Status */}
+        {/* Статус зміни */}
         {!isShiftActive && (
           <Card className="bg-yellow-50 border-yellow-200">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 text-yellow-800">
                 <Clock className="h-5 w-5" />
                 <span className="font-medium">Зміна не розпочата</span>
-                <span className="text-sm">- натисніть "Почати зміну" для початку роботи</span>
+                <span className="text-sm">
+                  - натисніть "Почати зміну" для початку роботи
+                </span>
                 {!isOnline && <span className="text-sm">(потрібен інтернет)</span>}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Action Buttons */}
+        {/* Кнопки дій */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <Button
             onClick={handleSell}
             className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl relative"
-            disabled={!isOnline}
+            disabled={!isOnline || !isShiftActive}
           >
             Продати
-            {isShiftActive && <Badge className="absolute top-2 right-2 bg-green-500">Активно</Badge>}
-            {!isOnline && <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Офлайн</Badge>}
+            {isShiftActive && (
+              <Badge className="absolute top-2 right-2 bg-green-500">Активно</Badge>
+            )}
+            {!isOnline && (
+              <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Офлайн</Badge>
+            )}
           </Button>
           <Button
             onClick={handleFindProduct}
@@ -257,11 +253,14 @@ export default function MainPage() {
           >
             Внести товар
             {currentUser?.role === "seller" && (
-              <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Тільки власник</Badge>
+              <Badge className="absolute top-2 right-2 bg-red-500 text-xs">
+                Тільки власник
+              </Badge>
             )}
-            {!isOnline && (currentUser?.role === "seller" || currentUser?.role === "owner") && (
-              <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Офлайн</Badge>
-            )}
+            {!isOnline &&
+              (currentUser?.role === "seller" || currentUser?.role === "owner") && (
+                <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Офлайн</Badge>
+              )}
           </Button>
           {(currentUser?.role === "seller" || currentUser?.role === "owner") && (
             <Button
@@ -274,29 +273,20 @@ export default function MainPage() {
           )}
         </div>
 
-        {/* Owner Actions */}
-        {currentUser?.role === "owner" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Button
-              onClick={handleUsersManagement}
-              className="bg-gray-700 hover:bg-gray-800 text-white h-16 text-lg font-medium rounded-xl flex items-center justify-center gap-2"
-              disabled={!isOnline}
-            >
-              <User className="h-5 w-5" />
-              Управління користувачами
-              {!isOnline && <Badge className="bg-red-500 text-xs ml-2">Офлайн</Badge>}
-            </Button>
-          </div>
-        )}
-
-        {/* Visits Section */}
+        {/* Управління візитами */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-medium text-gray-800">Візити</h2>
             {visits.length > 0 && (
               <Badge variant="secondary">
                 Сьогодні:{" "}
-                {visits.filter((v) => new Date(v.created_at).toDateString() === new Date().toDateString()).length}
+                {
+                  visits.filter(
+                    (v) =>
+                      new Date(v.created_at).toDateString() ===
+                      new Date().toDateString(),
+                  ).length
+                }
               </Badge>
             )}
           </div>
@@ -304,7 +294,9 @@ export default function MainPage() {
           {visits.length === 0 ? (
             <Card className="p-8 text-center">
               <p className="text-gray-500">Візитів поки немає</p>
-              <p className="text-sm text-gray-400">Візити з'являться після перших продажів</p>
+              <p className="text-sm text-gray-400">
+                Візити з'являться після перших продажів
+              </p>
             </Card>
           ) : (
             <ScrollArea className="w-full">
@@ -313,11 +305,15 @@ export default function MainPage() {
                   <Card
                     key={visit.id}
                     className="bg-black hover:bg-gray-800 cursor-pointer transition-colors flex-shrink-0 w-48"
-                    onClick={() => handleVisitClick(visit.id)}
+                    onClick={() => console.log(`Візит ${visit.id} clicked`)}
                   >
                     <CardContent className="p-6 flex flex-col items-center justify-center h-24">
-                      <span className="text-white text-lg font-medium">{visit.title}</span>
-                      <span className="text-gray-300 text-sm">{visit.sale_amount.toLocaleString()} ₴</span>
+                      <span className="text-white text-lg font-medium">
+                        {visit.title}
+                      </span>
+                      <span className="text-gray-300 text-sm">
+                        {visit.sale_amount.toLocaleString()} ₴
+                      </span>
                       <span className="text-gray-400 text-xs">
                         {new Date(visit.created_at).toLocaleTimeString("uk-UA", {
                           hour: "2-digit",
@@ -333,16 +329,19 @@ export default function MainPage() {
         </div>
       </div>
 
-      {/* Statistics Footer */}
+      {/* Нижній блок зі статистикою */}
       <div className="bg-gray-300 p-6 space-y-2 text-gray-800">
         <div className="text-lg">
-          <span className="font-medium">Всього продано на суму:</span> {totalSalesAmount.toLocaleString()} грн.
+          <span className="font-medium">Всього продано на суму:</span>{" "}
+          {totalSalesAmount.toLocaleString()} грн.
         </div>
         <div className="text-lg">
-          <span className="font-medium">Час на зміні:</span> {workingHours} год. {workingMinutes} хв.
+          <span className="font-medium">Час на зміні:</span> {workingHours} год.{" "}
+          {workingMinutes} хв.
         </div>
         <div className="text-lg">
-          <span className="font-medium">Грн в годину:</span> {getHourlyEarnings().toLocaleString()} грн.
+          <span className="font-medium">Грн в годину:</span>{" "}
+          {getHourlyEarnings().toLocaleString()} грн.
           {workingHours === 0 && workingMinutes === 0 && (
             <span className="text-sm text-gray-600 ml-2">(почніть зміну)</span>
           )}

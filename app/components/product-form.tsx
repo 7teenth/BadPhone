@@ -14,7 +14,7 @@ import type { Product } from "./product-catalog"
 
 interface ProductFormProps {
   product?: Product | null
-  onSave: (product: Omit<Product, "id" | "createdAt">) => void
+  onSave: (product: Omit<Product, "id" | "created_at">) => void
   onCancel: () => void
 }
 

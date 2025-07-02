@@ -1,14 +1,13 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Scan, X, Plus, AlertCircle, CheckCircle } from "lucide-react"
+import { X, Plus, AlertCircle, CheckCircle } from "lucide-react"
 
 interface Product {
   id: number
@@ -16,19 +15,22 @@ interface Product {
   category: string
   price: number
   quantity: number
-  description: string
+  description?: string
   brand: string
   model: string
-  createdAt: Date
+  created_at: Date
   barcode?: string
+  store_id?: string | null
 }
 
 interface BarcodeScannerProps {
   onClose: () => void
-  onProductAdded: (product: Omit<Product, "id" | "createdAt">) => void
+  onProductAdded: (product: Omit<Product, "id" | "created_at">) => void
+  stores: { id: string; name: string }[]
+  currentUserStoreId: string | null
 }
 
-export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps) {
+export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserStoreId }: BarcodeScannerProps) {
   const [barcode, setBarcode] = useState("")
   const [productData, setProductData] = useState({
     name: "",
@@ -39,41 +41,12 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
     brand: "",
     model: "",
   })
-  const [isScanning, setIsScanning] = useState(false)
-  const [scanResult, setScanResult] = useState<string | null>(null)
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(currentUserStoreId || null)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 
   const categories = ["Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"]
-
-  // Симуляція сканирования штрих-кода
-  const simulateBarcodeScan = () => {
-    setIsScanning(true)
-    setError("")
-
-    // Симулируем процесс сканирования
-    setTimeout(() => {
-      const mockBarcode = `${Date.now().toString().slice(-8)}`
-      setBarcode(mockBarcode)
-      setScanResult(mockBarcode)
-      setIsScanning(false)
-
-      // Автоматически заполняем некоторые поля для демонстрации
-      setProductData((prev) => ({
-        ...prev,
-        name: `Товар ${mockBarcode}`,
-        brand: "Generic",
-        model: `Model-${mockBarcode.slice(-4)}`,
-      }))
-    }, 2000)
-  }
-
-  const handleManualBarcodeEntry = () => {
-    if (barcode.trim()) {
-      setScanResult(barcode.trim())
-    }
-  }
 
   const validateForm = () => {
     if (!productData.name.trim()) return "Назва товару обов'язкова"
@@ -86,6 +59,7 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
     }
     if (!productData.brand.trim()) return "Бренд обов'язковий"
     if (!productData.model.trim()) return "Модель обов'язкова"
+    if (!selectedStoreId) return "Оберіть магазин"
     return null
   }
 
@@ -108,7 +82,8 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
       description: productData.description.trim(),
       brand: productData.brand.trim(),
       model: productData.model.trim(),
-      barcode: scanResult || undefined,
+      barcode: barcode.trim() || undefined,
+      store_id: selectedStoreId,
     }
 
     onProductAdded(product)
@@ -117,7 +92,6 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
     // Очищаем форму
     setTimeout(() => {
       setBarcode("")
-      setScanResult(null)
       setProductData({
         name: "",
         category: "",
@@ -127,6 +101,7 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
         brand: "",
         model: "",
       })
+      setSelectedStoreId(currentUserStoreId || null)
       setSuccess("")
     }, 1500)
   }
@@ -137,8 +112,8 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className="flex items-center gap-2">
-              <Scan className="h-5 w-5" />
-              Додати товар за штрих-кодом
+              <Plus className="h-5 w-5" />
+              Додати товар
             </CardTitle>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -146,42 +121,34 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Barcode Scanner Section */}
+          {/* Barcode input */}
           <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label htmlFor="barcode">Штрих-код</Label>
-                <Input
-                  id="barcode"
-                  ref={inputRef}
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="Введіть штрих-код або скануйте"
-                  onKeyPress={(e) => e.key === "Enter" && handleManualBarcodeEntry()}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label className="text-transparent">.</Label>
-                <Button
-                  type="button"
-                  onClick={simulateBarcodeScan}
-                  disabled={isScanning}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  {isScanning ? "Сканування..." : "Сканувати"}
-                </Button>
-              </div>
-            </div>
+            <Label htmlFor="barcode">Штрих-код</Label>
+            <Input
+              id="barcode"
+              ref={inputRef}
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="Введіть штрих-код"
+            />
+          </div>
 
-            {scanResult && (
-              <Alert>
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Штрих-код отримано: <strong>{scanResult}</strong>
-                </AlertDescription>
-              </Alert>
-            )}
+          {/* Store selector */}
+          <div className="space-y-2">
+            <Label htmlFor="store">Магазин *</Label>
+            <select
+              id="store"
+              value={selectedStoreId || ""}
+              onChange={(e) => setSelectedStoreId(e.target.value || null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Оберіть магазин</option>
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Product Form */}
@@ -205,7 +172,7 @@ export function BarcodeScanner({ onClose, onProductAdded }: BarcodeScannerProps)
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Оберіть категорію</option>
-                  {categories.map((cat) => (
+                  {["Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"].map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>

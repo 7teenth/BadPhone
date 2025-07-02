@@ -10,10 +10,10 @@ interface CartItem {
   category: string
   price: number
   quantity: number
-  description: string
+  description?: string
   brand: string
   model: string
-  createdAt: Date
+  created_at: Date
   cartQuantity: number
 }
 

@@ -14,10 +14,10 @@ interface Product {
   category: string
   price: number
   quantity: number
-  description: string
+  description?: string
   brand: string
   model: string
-  createdAt: Date
+  created_at: Date
 }
 
 interface FindProductPageProps {
@@ -33,94 +33,7 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
 
   // Sample products data
   const [products] = useState<Product[]>([
-    {
-      id: 1,
-      name: "Чохол iPhone 15 Pro",
-      category: "Чохли",
-      price: 450,
-      quantity: 25,
-      description: "Силіконовий чохол для iPhone 15 Pro з підвищеною захистом від ударів",
-      brand: "Apple",
-      model: "iPhone 15 Pro",
-      createdAt: new Date("2024-01-15"),
-    },
-    {
-      id: 2,
-      name: "Зарядний кабель USB-C",
-      category: "Зарядки",
-      price: 280,
-      quantity: 50,
-      description: "Швидкий зарядний кабель USB-C довжиною 1 метр",
-      brand: "Generic",
-      model: "USB-C",
-      createdAt: new Date("2024-01-10"),
-    },
-    {
-      id: 3,
-      name: "Навушники AirPods Pro",
-      category: "Навушники",
-      price: 8500,
-      quantity: 8,
-      description: "Бездротові навушники з активним шумозаглушенням",
-      brand: "Apple",
-      model: "AirPods Pro 2",
-      createdAt: new Date("2024-01-20"),
-    },
-    {
-      id: 4,
-      name: "Захисне скло Samsung S24",
-      category: "Захисні скла",
-      price: 320,
-      quantity: 15,
-      description: "Загартоване скло для Samsung Galaxy S24 з олеофобним покриттям",
-      brand: "Samsung",
-      model: "Galaxy S24",
-      createdAt: new Date("2024-01-12"),
-    },
-    {
-      id: 5,
-      name: "Power Bank Xiaomi 10000mAh",
-      category: "Power Bank",
-      price: 1200,
-      quantity: 12,
-      description: "Портативний зарядний пристрій з швидкою зарядкою",
-      brand: "Xiaomi",
-      model: "Mi Power Bank 3",
-      createdAt: new Date("2024-01-18"),
-    },
-    {
-      id: 6,
-      name: "Чохол Samsung Galaxy S24",
-      category: "Чохли",
-      price: 380,
-      quantity: 18,
-      description: "Прозорий силіконовий чохол з посиленими кутами",
-      brand: "Samsung",
-      model: "Galaxy S24",
-      createdAt: new Date("2024-01-14"),
-    },
-    {
-      id: 7,
-      name: "Бездротова зарядка iPhone",
-      category: "Зарядки",
-      price: 1500,
-      quantity: 6,
-      description: "MagSafe сумісна бездротова зарядка 15W",
-      brand: "Apple",
-      model: "MagSafe",
-      createdAt: new Date("2024-01-16"),
-    },
-    {
-      id: 8,
-      name: "Навушники Samsung Galaxy Buds",
-      category: "Навушники",
-      price: 3200,
-      quantity: 0,
-      description: "Компактні бездротові навушники з чудовим звуком",
-      brand: "Samsung",
-      model: "Galaxy Buds 2",
-      createdAt: new Date("2024-01-11"),
-    },
+    
   ])
 
   const categories = ["Всі", "Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank"]
@@ -150,7 +63,7 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
         case "quantity":
           return b.quantity - a.quantity
         case "date":
-          return b.createdAt.getTime() - a.createdAt.getTime()
+          return b.created_at.getTime() - a.created_at.getTime()
         default:
           return 0
       }
@@ -221,7 +134,7 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
 
               <div>
                 <h3 className="font-medium mb-2">Дата додавання</h3>
-                <p className="text-gray-700">{selectedProduct.createdAt.toLocaleDateString("uk-UA")}</p>
+                <p className="text-gray-700">{selectedProduct.created_at.toLocaleDateString("uk-UA")}</p>
               </div>
 
               <div className="flex gap-4 pt-4">
