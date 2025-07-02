@@ -9,8 +9,10 @@ import { ArrowLeft, Search, ShoppingCart, Plus, Minus, Trash2, Receipt, Banknote
 import { SaleReceipt } from "./sale-receipt"
 import { useApp } from "../context/app-context"
 import { Label } from "@/components/ui/label"
+import type { CartItem, Sale } from "@/types/sale"
 
-interface CartItem {
+
+/*interface CartItem {
   id: string
   name: string
   category: string
@@ -29,7 +31,7 @@ interface Sale {
   date: Date
   receiptNumber: string
   payment_method: "cash" | "terminal"
-}
+}*/
 
 interface SellPageProps {
   onBack: () => void

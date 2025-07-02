@@ -1,11 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { createClient } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select"
 import { ArrowLeft, Search, Package, ShoppingCart, Eye } from "lucide-react"
 
 interface Product {
@@ -24,28 +31,54 @@ interface FindProductPageProps {
   onBack: () => void
 }
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 const FindProductPage = ({ onBack }: FindProductPageProps) => {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("Всі")
   const [selectedBrand, setSelectedBrand] = useState("Всі")
   const [sortBy, setSortBy] = useState("name")
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-
-  // Sample products data
-  const [products] = useState<Product[]>([
-    
-  ])
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
 
   const categories = ["Всі", "Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank"]
   const brands = ["Всі", "Apple", "Samsung", "Xiaomi", "Generic"]
 
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Помилка завантаження товарів:", error)
+      } else {
+        const productsWithDates = data.map((product) => ({
+          ...product,
+          created_at: new Date(product.created_at)
+        }))
+        setProducts(productsWithDates)
+      }
+      setLoading(false)
+    }
+
+    fetchProducts()
+  }, [])
+
   const filteredProducts = products
     .filter((product) => {
+      const search = searchTerm.toLowerCase()
       const matchesSearch =
-        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchTerm.toLowerCase())
+        product.name.toLowerCase().includes(search) ||
+        product.brand.toLowerCase().includes(search) ||
+        product.model.toLowerCase().includes(search) ||
+        (product.description || "").toLowerCase().includes(search)
 
       const matchesCategory = selectedCategory === "Всі" || product.category === selectedCategory
       const matchesBrand = selectedBrand === "Всі" || product.brand === selectedBrand
@@ -80,7 +113,6 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
   if (selectedProduct) {
     return (
       <div className="min-h-screen bg-gray-200">
-        {/* Header */}
         <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={closeProductDetails} className="text-white hover:bg-gray-800">
             <ArrowLeft className="h-6 w-6" />
@@ -88,7 +120,6 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
           <h1 className="text-2xl font-bold">Деталі товару</h1>
         </header>
 
-        {/* Product Details */}
         <div className="p-6">
           <Card className="max-w-2xl mx-auto">
             <CardHeader>
@@ -158,7 +189,6 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
 
   return (
     <div className="min-h-screen bg-gray-200">
-      {/* Header */}
       <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
           <ArrowLeft className="h-6 w-6" />
@@ -166,12 +196,9 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
         <h1 className="text-2xl font-bold">Знайти товар</h1>
       </header>
 
-      {/* Content */}
       <div className="p-6 space-y-6">
-        {/* Search and Filters */}
         <Card>
           <CardContent className="p-6 space-y-4">
-            {/* Search Input */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
@@ -183,7 +210,6 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
               />
             </div>
 
-            {/* Filters */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger>
@@ -240,25 +266,9 @@ const FindProductPage = ({ onBack }: FindProductPageProps) => {
           </CardContent>
         </Card>
 
-        {/* Results Summary */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-medium">
-            Знайдено товарів: <span className="font-bold">{filteredProducts.length}</span>
-          </h2>
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span>В наявності: {filteredProducts.filter((p) => p.quantity > 0).length}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span>Закінчилось: {filteredProducts.filter((p) => p.quantity === 0).length}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Products Grid */}
-        {filteredProducts.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12 text-gray-600">Завантаження...</div>
+        ) : filteredProducts.length === 0 ? (
           <Card className="p-12 text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-medium text-gray-600 mb-2">Товари не знайдено</h3>

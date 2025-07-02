@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,22 +10,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApp } from "../../context/app-context"
 
 export default function LoginPage() {
-  const { login, register, isAuthenticated } = useApp()
+  const { login, register, isAuthenticated, stores } = useApp()
   const [tab, setTab] = useState<"login" | "register">("login")
   const [loginValue, setLoginValue] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    if (stores.length > 0 && !selectedStoreId) {
+      setSelectedStoreId(stores[0].id)
+    }
+  }, [stores, selectedStoreId])
+
   const handleLogin = async () => {
     setError(null)
     setLoading(true)
-    const success = await login(loginValue, password)
+
+    if (!selectedStoreId) {
+      setError("Будь ласка, оберіть магазин")
+      setLoading(false)
+      return
+    }
+
+    const success = await login(loginValue, password, selectedStoreId)
+
     setLoading(false)
+
     if (!success) {
-      setError("Неправильний логін або пароль")
+      setError("Неправильний логін, пароль або магазин")
     }
   }
 
@@ -39,15 +55,12 @@ export default function LoginPage() {
     }
 
     setLoading(true)
-    // Передаём пустую строку для storeId, т.к. поле убрали
-    const success = await register(loginValue, password, name, "seller", null);
+    const success = await register(loginValue, password, name, "seller", null)
     setLoading(false)
 
     if (success) {
       setSuccess("Реєстрація успішна! Тепер можете увійти.")
       setTab("login")
-      // При необходимости можно очистить поля:
-      // setLoginValue(""); setPassword(""); setName("");
     } else {
       setError("Не вдалося зареєструвати користувача")
     }
@@ -106,6 +119,21 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
+            <div>
+              <Label htmlFor="store-select">Оберіть магазин</Label>
+              <select
+                id="store-select"
+                value={selectedStoreId || ""}
+                onChange={(e) => setSelectedStoreId(e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Button onClick={handleLogin} disabled={loading}>
               Увійти
             </Button>
@@ -152,7 +180,6 @@ export default function LoginPage() {
                 autoComplete="name"
               />
             </div>
-            {/* Поле для магазину убрано */}
             <Button onClick={handleRegister} disabled={loading}>
               Зареєструватися
             </Button>

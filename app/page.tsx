@@ -300,31 +300,28 @@ export default function MainPage() {
             </Card>
           ) : (
             <ScrollArea className="w-full">
-              <div className="flex gap-4 pb-4">
-                {visits.slice(0, 10).map((visit) => (
-                  <Card
-                    key={visit.id}
-                    className="bg-black hover:bg-gray-800 cursor-pointer transition-colors flex-shrink-0 w-48"
-                    onClick={() => console.log(`Візит ${visit.id} clicked`)}
-                  >
-                    <CardContent className="p-6 flex flex-col items-center justify-center h-24">
-                      <span className="text-white text-lg font-medium">
-                        {visit.title}
-                      </span>
-                      <span className="text-gray-300 text-sm">
-                        {visit.sale_amount.toLocaleString()} ₴
-                      </span>
-                      <span className="text-gray-400 text-xs">
-                        {new Date(visit.created_at).toLocaleTimeString("uk-UA", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
+  <div className="flex flex-row-reverse gap-4 pb-4">
+    {visits.slice(0, 10).map((visit) => (
+      <Card
+        key={visit.id}
+        className="bg-black hover:bg-gray-800 cursor-pointer transition-colors flex-shrink-0 w-48"
+        onClick={() => console.log(`Візит ${visit.id} clicked`)}
+      >
+        <CardContent className="p-6 flex flex-col items-center justify-center h-24">
+          <span className="text-white text-lg font-medium">{visit.title}</span>
+          <span className="text-gray-300 text-sm">{visit.sale_amount.toLocaleString()} ₴</span>
+          <span className="text-gray-400 text-xs">
+            {new Date(visit.created_at).toLocaleTimeString("uk-UA", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+</ScrollArea>
+
           )}
         </div>
       </div>

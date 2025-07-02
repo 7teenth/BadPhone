@@ -24,18 +24,53 @@ interface AdminDashboardProps {
   onBack: () => void
 }
 
+interface SellerStats {
+  name: string
+  amount: number
+  salesCount: number
+}
+
+interface DailyStat {
+  date: string
+  salesCount: number
+  totalAmount: number
+  sellers: { [sellerId: string]: SellerStats }
+}
+
+interface TotalStats {
+  totalRevenue: number
+  totalSales: number
+  averageSale: number
+  topSellingAmount: number
+  topSellingDay: string
+  cashAmount: number
+  terminalAmount: number
+}
+
 export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { getDailySalesStats, getTotalStats } = useApp()
-  const [selectedPeriod, setSelectedPeriod] = useState("7days")
 
-  const dailyStats = getDailySalesStats()
-  const totalStats = getTotalStats()
+  // Получаем данные
+  const dailyStats: DailyStat[] = getDailySalesStats() || []
+  const totalStats: TotalStats = getTotalStats() || {
+    totalRevenue: 0,
+    totalSales: 0,
+    averageSale: 0,
+    topSellingAmount: 0,
+    topSellingDay: "",
+    cashAmount: 0,
+    terminalAmount: 0,
+  }
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString() + " ₴"
+  const [selectedPeriod, setSelectedPeriod] = useState("7days") // можно использовать для фильтра по периоду
+
+  const formatCurrency = (amount?: number) => {
+    if (amount === undefined || amount === null) return "—"
+    return amount.toLocaleString("uk-UA") + " ₴"
   }
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "—"
     return new Date(dateString).toLocaleDateString("uk-UA", {
       day: "2-digit",
       month: "2-digit",
@@ -44,16 +79,16 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   }
 
   const getTopSellers = () => {
-    const sellerStats: { [sellerId: string]: { name: string; amount: number; salesCount: number } } = {}
+    const sellerStats: { [sellerId: string]: SellerStats } = {}
 
     dailyStats.forEach((day) => {
+      if (!day.sellers) return
       Object.entries(day.sellers).forEach(([sellerId, seller]) => {
-        const typedSeller = seller as { name: string; amount: number; salesCount: number }
         if (!sellerStats[sellerId]) {
-          sellerStats[sellerId] = { name: typedSeller.name, amount: 0, salesCount: 0 }
+          sellerStats[sellerId] = { name: seller.name, amount: 0, salesCount: 0 }
         }
-        sellerStats[sellerId].amount += typedSeller.amount
-        sellerStats[sellerId].salesCount += typedSeller.salesCount
+        sellerStats[sellerId].amount += seller.amount
+        sellerStats[sellerId].salesCount += seller.salesCount
       })
     })
 
@@ -118,7 +153,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">{formatCurrency(totalStats.topSellingAmount)}</div>
-              <p className="text-xs text-muted-foreground">{totalStats.topSellingDay}</p>
+              <p className="text-xs text-muted-foreground">{formatDate(totalStats.topSellingDay)}</p>
             </CardContent>
           </Card>
 
@@ -167,7 +202,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   {dailyStats.length === 0 ? (
                     <p className="text-center text-gray-500 py-8">Немає даних про продажі</p>
                   ) : (
-                    dailyStats.map((day, index) => (
+                    dailyStats.map((day) => (
                       <div key={day.date} className="border rounded-lg p-4">
                         <div className="flex justify-between items-center mb-3">
                           <div>
@@ -177,7 +212,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                           <div className="text-right">
                             <div className="text-xl font-bold text-green-600">{formatCurrency(day.totalAmount)}</div>
                             <div className="text-sm text-gray-600">
-                              Середній чек: {formatCurrency(Math.round(day.totalAmount / day.salesCount))}
+                              Середній чек:{" "}
+                              {day.salesCount > 0
+                                ? formatCurrency(Math.round(day.totalAmount / day.salesCount))
+                                : "—"}
                             </div>
                           </div>
                         </div>
@@ -186,22 +224,20 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-gray-700">Продавці:</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {Object.entries(day.sellers).map(([sellerId, seller]) => {
-                              const typedSeller = seller as { name: string; amount: number; salesCount: number }
-                              return (
+                            {day.sellers &&
+                              Object.entries(day.sellers).map(([sellerId, seller]) => (
                                 <div key={sellerId} className="bg-gray-50 rounded p-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium">{typedSeller.name}</span>
+                                    <span className="text-sm font-medium">{seller.name}</span>
                                     <Badge variant="secondary" className="text-xs">
-                                      {typedSeller.salesCount} продажів
+                                      {seller.salesCount} продажів
                                     </Badge>
                                   </div>
                                   <div className="text-sm text-green-600 font-medium">
-                                    {formatCurrency(typedSeller.amount)}
+                                    {formatCurrency(seller.amount)}
                                   </div>
                                 </div>
-                              )
-                            })}
+                              ))}
                           </div>
                         </div>
                       </div>
@@ -239,7 +275,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div className="text-right">
                           <div className="text-xl font-bold text-green-600">{formatCurrency(seller.amount)}</div>
                           <div className="text-sm text-gray-600">
-                            Середній чек: {formatCurrency(Math.round(seller.amount / seller.salesCount))}
+                            Середній чек:{" "}
+                            {seller.salesCount > 0
+                              ? formatCurrency(Math.round(seller.amount / seller.salesCount))
+                              : "—"}
                           </div>
                         </div>
                       </div>
@@ -259,12 +298,9 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {/* Здесь можно добавить более детальную историю продаж */}
-                  <p className="text-center text-gray-500 py-8">
-                    Детальна історія продажів буде доступна в окремому розділі
-                  </p>
-                </div>
+                <p className="text-center text-gray-500 py-8">
+                  Детальна історія продажів буде доступна в окремому розділі
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -280,8 +316,11 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {topSellers.slice(0, 5).map((seller, index) => {
-                      const percentage = Math.round((seller.amount / totalStats.totalRevenue) * 100)
+                    {topSellers.slice(0, 5).map((seller) => {
+                      const percentage =
+                        totalStats.totalRevenue > 0
+                          ? Math.round((seller.amount / totalStats.totalRevenue) * 100)
+                          : 0
                       return (
                         <div key={seller.id} className="space-y-2">
                           <div className="flex justify-between text-sm">
@@ -289,7 +328,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                             <span>{percentage}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div className="bg-black h-2 rounded-full" style={{ width: `${percentage}%` }} />
+                            <div
+                              className="bg-black h-2 rounded-full"
+                              style={{ width: `${percentage}%` }}
+                            />
                           </div>
                         </div>
                       )
@@ -310,21 +352,30 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="text-center p-3 bg-green-50 rounded">
                         <div className="text-2xl font-bold text-green-600">
-                          {dailyStats.length > 0 ? Math.round(totalStats.totalRevenue / dailyStats.length) : 0}₴
+                          {dailyStats.length > 0
+                            ? Math.round(totalStats.totalRevenue / dailyStats.length)
+                            : 0}
+                          ₴
                         </div>
                         <div className="text-sm text-gray-600">Середній дохід на день</div>
                       </div>
                       <div className="text-center p-3 bg-blue-50 rounded">
                         <div className="text-2xl font-bold text-blue-600">
-                          {dailyStats.length > 0 ? Math.round(totalStats.totalSales / dailyStats.length) : 0}
+                          {dailyStats.length > 0
+                            ? Math.round(totalStats.totalSales / dailyStats.length)
+                            : 0}
                         </div>
                         <div className="text-sm text-gray-600">Середня к-сть продажів</div>
                       </div>
                     </div>
 
                     <div className="text-center p-4 bg-gray-50 rounded">
-                      <div className="text-lg font-medium text-gray-700">Активних днів: {dailyStats.length}</div>
-                      <div className="text-sm text-gray-600">Загальна кількість робочих днів з продажами</div>
+                      <div className="text-lg font-medium text-gray-700">
+                        Активних днів: {dailyStats.length}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Загальна кількість робочих днів з продажами
+                      </div>
                     </div>
                   </div>
                 </CardContent>

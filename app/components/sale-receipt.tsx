@@ -3,8 +3,10 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Printer, Download, Plus } from "lucide-react"
+import type { CartItem, Sale } from "@/types/sale"
 
-interface CartItem {
+
+/*interface CartItem {
   id: number
   name: string
   category: string
@@ -23,7 +25,7 @@ interface Sale {
   total: number
   date: Date
   receiptNumber: string
-}
+}*/
 
 interface SaleReceiptProps {
   sale: Sale
