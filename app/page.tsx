@@ -1,5 +1,6 @@
 "use client"
 
+import { ShiftControl } from "./components/shift-control"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -124,25 +125,21 @@ export default function MainPage() {
               </div>
             )}
           </div>
-          <Button
-            onClick={handleShiftToggle}
-            size="sm"
-            variant={isShiftActive ? "destructive" : "secondary"}
-            className="flex items-center gap-2"
-            disabled={!isOnline}
-          >
-            {isShiftActive ? (
-              <>
-                <Square className="h-4 w-4" />
-                Закінчити зміну
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4" />
-                Почати зміну
-              </>
-            )}
-          </Button>
+          {isShiftActive ? (
+  <ShiftControl />
+) : (
+  <Button
+    onClick={startShift}
+    size="sm"
+    variant="secondary"
+    className="flex items-center gap-2"
+    disabled={!isOnline}
+  >
+    <Play className="h-4 w-4" />
+    Почати зміну
+  </Button>
+)}
+
         </div>
 
         <div className="flex items-center gap-6">
@@ -299,9 +296,9 @@ export default function MainPage() {
               </p>
             </Card>
           ) : (
-            <ScrollArea className="w-full">
-  <div className="flex flex-row-reverse gap-4 pb-4">
-    {visits.slice(0, 10).map((visit) => (
+            <ScrollArea className="w-full overflow-x-auto">
+  <div className="flex flex-row-reverse gap-4 pb-4 w-max">
+    {visits.map((visit) => (
       <Card
         key={visit.id}
         className="bg-black hover:bg-gray-800 cursor-pointer transition-colors flex-shrink-0 w-48"
@@ -321,6 +318,8 @@ export default function MainPage() {
     ))}
   </div>
 </ScrollArea>
+
+
 
           )}
         </div>

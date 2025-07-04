@@ -111,6 +111,16 @@ interface AppContextType extends AppState {
   getDailySalesStats: () => any[]
   getTotalStats: () => any
   loadData: () => Promise<void>
+  getShiftStats: () => {
+    start: Date
+    end: Date
+    totalAmount: number
+    cashAmount: number
+    terminalAmount: number
+    count: number
+    totalItems: number
+    avgCheck: number
+  } | null
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -130,30 +140,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentStore, setCurrentStore] = useState<Store | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
-
-  // Добавление визита (твоя функция)
-  const addVisit = async (visit: Omit<Visit, "id" | "created_at">) => {
-    if (!isOnline) return
-
-    try {
-      const { data, error } = await supabase
-        .from("visits")
-        .insert([visit])
-        .select()
-        .maybeSingle()
-
-      if (error) {
-        console.error("Error adding visit:", error)
-        return
-      }
-
-      if (data) {
-        setVisits((prev) => [...prev, data])
-      }
-    } catch (error) {
-      console.error("addVisit failed:", error)
-    }
-  }
 
   // Загрузка магазинов из базы
   useEffect(() => {
@@ -249,7 +235,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       await loadProducts()
 
+      const recalcTotalSalesAmount = (salesList: Sale[]) => {
+        const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
+        setTotalSalesAmount(total)
+      }
+
       if (currentUser) {
+        // Подгружаем текущую открытую смену, если есть (без фильтра на end_time, т.к. end_time=null при открытой смене)
+        const { data: shiftData } = await supabase
+          .from("shifts")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .is("end_time", null)
+          .maybeSingle()
+
+        setCurrentShift(shiftData || null)
+
+        if (!shiftData) {
+          setSales([])
+          setTotalSalesAmount(0)
+          // Не очищаем visits, чтобы они отображались
+          // setVisits([])
+          return
+        }
+
         if (currentUser.role === "owner") {
           const { data: productsData } = await supabase.from("products").select("*")
           const { data: salesData } = await supabase.from("sales").select("*")
@@ -262,6 +271,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               return { ...sale, seller }
             })
             setSales(salesWithSellers)
+            recalcTotalSalesAmount(salesWithSellers)
           }
           if (visitsData) {
             const visitsWithSellers = visitsData.map((visit) => {
@@ -285,6 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               return { ...sale, seller }
             })
             setSales(salesWithSellers)
+            recalcTotalSalesAmount(salesWithSellers)
           }
           if (visitsData) {
             const visitsWithSellers = visitsData.map((visit) => {
@@ -326,71 +337,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // --- Вот основное изменение: login теперь принимает selectedStoreId ---
   const login = async (
-    login: string,
-    password: string,
-    selectedStoreId: string,
-  ): Promise<boolean> => {
-    if (!isOnline) return false
+  login: string,
+  password: string,
+  selectedStoreId: string
+): Promise<boolean> => {
+  if (!isOnline) return false
 
-    const hashedPassword = hashPassword(password)
-    const cleanLogin = login.trim().toLowerCase()
+  const hashedPassword = hashPassword(password)
+  const cleanLogin = login.trim().toLowerCase()
 
-    try {
-      const { data: userData, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("login", cleanLogin)
-        .maybeSingle()
+  try {
+    const { data: userData, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("login", cleanLogin)
+      .maybeSingle()
 
-      if (error || !userData) {
-        console.error("Login error or user not found:", error)
-        return false
-      }
-
-      if (userData.password_hash !== hashedPassword) {
-        console.error("Invalid password")
-        return false
-      }
-
-      // Если у пользователя есть store_id, проверяем совпадение с выбранным магазином
-      if (userData.store_id && userData.store_id !== selectedStoreId) {
-        console.error("Selected store does not match user's store")
-        return false
-      }
-
-      let storeData = null
-      if (selectedStoreId) {
-        const { data: store, error: storeError } = await supabase
-          .from("stores")
-          .select("*")
-          .eq("id", selectedStoreId)
-          .maybeSingle()
-
-        if (storeError) {
-          console.error("Error loading selected store:", storeError)
-        } else {
-          storeData = store
-        }
-      }
-
-      const userWithStore = { ...userData, store: storeData }
-
-      setCurrentUser(userWithStore)
-      setCurrentStore(storeData)
-      setIsAuthenticated(true)
-
-      await loadData()
-
-      return true
-    } catch (error) {
-      console.error("Login failed:", error)
+    if (error || !userData) {
+      console.error("Login error or user not found:", error)
       return false
     }
-  }
 
-  // Logout сбрасывает состояние
+    if (userData.password_hash !== hashedPassword) {
+      console.error("Invalid password")
+      return false
+    }
+
+    // 💥 Завжди підвантажуємо магазин
+    let storeData: Store | null = null
+    if (selectedStoreId) {
+      const { data: store, error: storeError } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("id", selectedStoreId)
+        .maybeSingle()
+
+      if (storeError) {
+        console.error("Error loading selected store:", storeError)
+        return false
+      }
+
+      storeData = store
+    }
+
+    const userWithStore: User = {
+      ...userData,
+      store: storeData || undefined,
+    }
+
+    // 💾 Ставимо користувача та магазин
+    setCurrentUser(userWithStore)
+    setCurrentStore(storeData)
+    setIsAuthenticated(true)
+
+    // 🧠 Завантажуємо все інше вже з нормальним контекстом
+    await loadData()
+
+    return true
+  } catch (error) {
+    console.error("Login failed:", error)
+    return false
+  }
+}
+
+
   const logout = () => {
     setCurrentUser(null)
     setCurrentStore(null)
@@ -403,7 +414,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setStores([])
   }
 
-  // Регистрация, оставлена без изменений (role всегда "seller")
   const register = async (
     login: string,
     password: string,
@@ -432,7 +442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         login,
         password_hash: hashedPassword,
         name,
-        role: "seller", // жёстко seller
+        role: "seller",
         store_id: store_id_to_insert,
       })
 
@@ -449,11 +459,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Запуск смены — использует currentStore.id, а не currentUser.store_id
   const startShift = async () => {
     if (!isOnline || !currentUser || currentShift) return
 
     try {
+      await supabase
+        .from("visits")
+        .delete()
+        .eq("store_id", currentStore?.id)
+
       const now = new Date().toISOString()
       const { data, error } = await supabase
         .from("shifts")
@@ -482,14 +496,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const now = new Date().toISOString()
-      const { error } = await supabase.from("shifts").update({ end_time: now }).eq("id", currentShift.id)
+
+      const { error } = await supabase
+        .from("shifts")
+        .update({ end_time: now })
+        .eq("id", currentShift.id)
 
       if (error) {
         console.error("Error ending shift:", error)
         return
       }
 
-      setCurrentShift(null)
+      // Очистка визитов после закрытия смены (по бизнес-логике)
+      await supabase
+        .from("visits")
+        .delete()
+        .eq("store_id", currentStore?.id)
+
+      setCurrentShift({ ...currentShift, end_time: now })
+      setTotalSalesAmount(0)
     } catch (err) {
       console.error("Failed to end shift:", err)
     }
@@ -560,7 +585,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Добавление продажи — в ней тоже используем currentStore?.id для store_id
   const addSale = async (sale: Omit<Sale, "id" | "store_id" | "created_at">) => {
   if (!isOnline || !currentUser) {
     console.error("Offline or no user, cannot add sale")
@@ -570,7 +594,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   try {
     const store_id = currentStore?.id || null
 
-    // Визначаємо кількість візитів для поточного магазину
+    // Считаем количество визитов, чтобы номер сделать
     const { count: visitsCount, error: countError } = await supabase
       .from("visits")
       .select("id", { count: "exact", head: true })
@@ -582,7 +606,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const visitNumber = (visitsCount ?? 0) + 1
 
-    // Додаємо продаж
+    // Добавляем продажу
     const { data, error } = await supabase
       .from("sales")
       .insert([
@@ -604,29 +628,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (data) {
-      setSales((prev) => [...prev, data])
-      setTotalSalesAmount((prev) => prev + data.total_amount)
+      setSales((prev) => {
+        const updatedSales = [...prev, { ...data, seller: currentUser }]
+        const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
+        setTotalSalesAmount(total)
+        return updatedSales
+      })
 
-      // Створюємо назву візиту у форматі "Візит N"
-      const visitTitle = `Візит ${visitNumber}`
+      // Обновляем количество товара
+      for (const item of sale.items_data) {
+        const productId = item.product_id
+        const soldQty = item.quantity
 
-      const { data: visitData, error: visitError } = await supabase
-        .from("visits")
-        .insert([
+        if (!productId || !soldQty) continue
+
+        const existingProduct = products.find((p) => p.id === productId)
+        if (!existingProduct) continue
+
+        const newQty = Math.max(0, existingProduct.quantity - soldQty)
+
+        const { data: updatedProduct, error: updateError } = await supabase
+          .from("products")
+          .update({ quantity: newQty })
+          .eq("id", productId)
+          .select()
+          .maybeSingle()
+
+        if (updateError) {
+          console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
+        }
+
+        setProducts((prev) =>
+          prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p))
+        )
+      }
+    }
+
+    // Добавляем визит
+    if (visitNumber) {
+      const { error: visitInsertError } = await supabase.from("visits").insert([
+        {
+          store_id,
+          seller_id: currentUser.id,
+          title: `Візит №${visitNumber}`,
+          sale_amount: sale.total_amount,
+        },
+      ])
+
+      if (visitInsertError) {
+        console.error("Error adding visit:", visitInsertError)
+      } else {
+        setVisits((prev) => [
+          ...prev,
           {
-            store_id,
+            id: `visit-${Date.now()}`,
+            store_id: store_id || "",
             seller_id: currentUser.id,
-            title: visitTitle,
+            title: `Візит №${visitNumber}`,
             sale_amount: sale.total_amount,
+            created_at: new Date().toISOString(),
+            seller: currentUser,
           },
         ])
-        .select()
-        .maybeSingle()
-
-      if (visitError) {
-        console.error("Error adding visit:", visitError)
-      } else if (visitData) {
-        setVisits((prev) => [...prev, visitData])
       }
     }
   } catch (error) {
@@ -635,142 +698,115 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 }
 
 
-  // Заглушки, можно потом реализовать
-  const deleteUser = async (userId: string) => false
-  const getHourlyEarnings = () => 0
+
+  // Доп. методы статистики
+
   const getDailySalesStats = () => {
-  // Группируем продажи по дате (YYYY-MM-DD)
-  const salesByDate: Record<string, {
-    salesCount: number
-    totalAmount: number
-    sellers: Record<string, { name: string; amount: number; salesCount: number }>
-  }> = {}
+    // Пример подсчёта по дням
+    const statsMap: Record<string, number> = {}
 
-  for (const sale of sales) {
-    const date = sale.created_at.slice(0, 10) // дата без времени
+    sales.forEach((sale) => {
+      const date = new Date(sale.created_at).toLocaleDateString("uk-UA")
+      statsMap[date] = (statsMap[date] || 0) + sale.total_amount
+    })
 
-    if (!salesByDate[date]) {
-      salesByDate[date] = {
-        salesCount: 0,
-        totalAmount: 0,
-        sellers: {},
-      }
-    }
-
-    salesByDate[date].salesCount += 1
-    salesByDate[date].totalAmount += sale.total_amount
-
-    const sellerId = sale.seller_id || "unknown"
-    const sellerName = sale.seller?.name || "Unknown"
-
-    if (!salesByDate[date].sellers[sellerId]) {
-      salesByDate[date].sellers[sellerId] = {
-        name: sellerName,
-        amount: 0,
-        salesCount: 0,
-      }
-    }
-
-    salesByDate[date].sellers[sellerId].amount += sale.total_amount
-    salesByDate[date].sellers[sellerId].salesCount += 1
+    return Object.entries(statsMap).map(([date, amount]) => ({ date, amount }))
   }
-
-  // Преобразуем объект в массив с сортировкой по дате по убыванию (сначала новые даты)
-  return Object.entries(salesByDate)
-    .map(([date, stats]) => ({
-      date,
-      salesCount: stats.salesCount,
-      totalAmount: stats.totalAmount,
-      sellers: stats.sellers,
-    }))
-    .sort((a, b) => b.date.localeCompare(a.date))
-}
 
   const getTotalStats = () => {
-  if (sales.length === 0) {
-    return {
-      totalRevenue: 0,
-      totalSales: 0,
-      averageSale: 0,
-      topSellingAmount: 0,
-      topSellingDay: "",
-      cashAmount: 0,
-      terminalAmount: 0,
+    const totalAmount = sales.reduce((sum, sale) => sum + sale.total_amount, 0)
+    return { totalAmount, salesCount: sales.length }
+  }
+
+  const getShiftStats = () => {
+    if (!currentShift) return null
+
+    const start = new Date(currentShift.start_time)
+    const end = currentShift.end_time ? new Date(currentShift.end_time) : new Date()
+
+    const salesDuringShift = sales.filter((s) => {
+      const created = new Date(s.created_at)
+      return created >= start && created <= end
+    })
+
+    const totalAmount = salesDuringShift.reduce((sum, s) => sum + s.total_amount, 0)
+    const cashAmount = salesDuringShift
+      .filter((s) => s.payment_method === "cash")
+      .reduce((sum, s) => sum + s.total_amount, 0)
+    const terminalAmount = salesDuringShift
+      .filter((s) => s.payment_method === "terminal")
+      .reduce((sum, s) => sum + s.total_amount, 0)
+    const count = salesDuringShift.length
+    const totalItems = salesDuringShift.reduce((sum, s) => sum + s.items_data.length, 0)
+    const avgCheck = count > 0 ? totalAmount / count : 0
+
+    return { start, end, totalAmount, cashAmount, terminalAmount, count, totalItems, avgCheck }
+  }
+
+  const isShiftActive = Boolean(currentShift && !currentShift.end_time)
+
+  const getHourlyEarnings = () => {
+    if (!currentShift) return 0
+    const totalMinutes = workingHours * 60 + workingMinutes
+    if (totalMinutes === 0) return 0
+    return totalSalesAmount / (totalMinutes / 60)
+  }
+
+  const deleteUser = async (userId: string): Promise<boolean> => {
+    if (!isOnline) return false
+
+    try {
+      const { error } = await supabase.from("users").delete().eq("id", userId)
+      if (error) {
+        console.error("Error deleting user:", error)
+        return false
+      }
+      await loadData()
+      return true
+    } catch (error) {
+      console.error("deleteUser failed:", error)
+      return false
     }
   }
 
-  let totalRevenue = 0
-  let cashAmount = 0
-  let terminalAmount = 0
-  const salesByDate: Record<string, number> = {}
-
-  for (const sale of sales) {
-    totalRevenue += sale.total_amount
-    if (sale.payment_method === "cash") cashAmount += sale.total_amount
-    else if (sale.payment_method === "terminal") terminalAmount += sale.total_amount
-
-    const date = sale.created_at.slice(0, 10)
-    salesByDate[date] = (salesByDate[date] || 0) + sale.total_amount
-  }
-
-  const totalSales = sales.length
-  const averageSale = totalRevenue / totalSales
-
-  // Находим дату с максимальными продажами
-  let topSellingDay = ""
-  let topSellingAmount = 0
-  for (const [date, amount] of Object.entries(salesByDate)) {
-    if (amount > topSellingAmount) {
-      topSellingAmount = amount
-      topSellingDay = date
-    }
-  }
-
-  return {
-    totalRevenue,
-    totalSales,
-    averageSale,
-    topSellingAmount,
-    topSellingDay,
-    cashAmount,
-    terminalAmount,
-  }
-}
-
-
-  const value: AppContextType = {
-    currentTime,
-    sales,
-    visits,
-    products,
-    users,
-    stores,
-    currentShift,
-    totalSalesAmount,
-    workingHours,
-    workingMinutes,
-    currentUser,
-    currentStore,
-    isAuthenticated,
-    isOnline,
-    addSale,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    deleteUser,
-    startShift,
-    endShift,
-    isShiftActive: currentShift !== null,
-    getHourlyEarnings,
-    login,
-    logout,
-    register,
-    getDailySalesStats,
-    getTotalStats,
-    loadData,
-  }
-
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+  return (
+    <AppContext.Provider
+      value={{
+        currentTime,
+        sales,
+        visits,
+        products,
+        users,
+        stores,
+        currentShift,
+        totalSalesAmount,
+        workingHours,
+        workingMinutes,
+        currentUser,
+        currentStore,
+        isAuthenticated,
+        isOnline,
+        addSale,
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        startShift,
+        endShift,
+        isShiftActive,
+        getHourlyEarnings,
+        login,
+        logout,
+        register,
+        deleteUser,
+        getDailySalesStats,
+        getTotalStats,
+        loadData,
+        getShiftStats,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  )
 }
 
 export function useApp() {

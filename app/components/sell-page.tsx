@@ -1,43 +1,34 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Search, ShoppingCart, Plus, Minus, Trash2, Receipt, Banknote, CreditCard } from "lucide-react"
+import {
+  ArrowLeft,
+  Search,
+  ShoppingCart,
+  Plus,
+  Minus,
+  Trash2,
+  Receipt,
+  Banknote,
+  CreditCard,
+} from "lucide-react"
 import { SaleReceipt } from "./sale-receipt"
 import { useApp } from "../context/app-context"
 import { Label } from "@/components/ui/label"
 import type { CartItem, Sale } from "@/types/sale"
 
-
-/*interface CartItem {
-  id: string
-  name: string
-  category: string
-  price: number
-  quantity: number
-  description?: string
-  brand: string
-  model: string
-  cartQuantity: number
-}
-
-interface Sale {
-  id: number
-  items: CartItem[]
-  total: number
-  date: Date
-  receiptNumber: string
-  payment_method: "cash" | "terminal"
-}*/
-
 interface SellPageProps {
-  onBack: () => void
+  onBack?: () => void
 }
 
 const SellPage = ({ onBack }: SellPageProps) => {
+  const router = useRouter()
+
   const [searchTerm, setSearchTerm] = useState("")
   const [cart, setCart] = useState<CartItem[]>([])
   const [showReceipt, setShowReceipt] = useState(false)
@@ -59,7 +50,11 @@ const SellPage = ({ onBack }: SellPageProps) => {
 
     if (existingItem) {
       if (existingItem.cartQuantity < product.quantity) {
-        setCart(cart.map((item) => (item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item)))
+        setCart(
+          cart.map((item) =>
+            item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item,
+          ),
+        )
       }
     } else {
       setCart([...cart, { ...product, cartQuantity: 1 }])
@@ -72,7 +67,9 @@ const SellPage = ({ onBack }: SellPageProps) => {
     } else {
       const product = products.find((p) => p.id === productId)
       if (product && newQuantity <= product.quantity) {
-        setCart(cart.map((item) => (item.id === productId ? { ...item, cartQuantity: newQuantity } : item)))
+        setCart(
+          cart.map((item) => (item.id === productId ? { ...item, cartQuantity: newQuantity } : item)),
+        )
       }
     }
   }
@@ -103,10 +100,10 @@ const SellPage = ({ onBack }: SellPageProps) => {
       receipt_number: receiptNumber,
       total_amount: getTotalAmount(),
       items_data: cart.map((item) => ({
-        id: item.id,
+        product_id: item.id,
+        quantity: item.cartQuantity,
         name: item.name,
         price: item.price,
-        cartQuantity: item.cartQuantity,
         brand: item.brand,
         model: item.model,
       })),
@@ -124,23 +121,39 @@ const SellPage = ({ onBack }: SellPageProps) => {
   }
 
   if (showReceipt && currentSale) {
-    return (
-      <SaleReceipt
-        sale={currentSale}
-        onBack={() => setShowReceipt(false)}
-        onNewSale={() => {
-          setShowReceipt(false)
-          setCurrentSale(null)
-        }}
-      />
-    )
-  }
+  return (
+    <SaleReceipt
+      sale={currentSale}
+      onNewSale={() => {
+        setShowReceipt(false)
+        setCurrentSale(null)
+      }}
+      onBack={() => {
+        setShowReceipt(false)
+        setCurrentSale(null)
+        onBack?.() // вызываем только если onBack передан
+      }}
+    />
+  )
+}
+
 
   return (
     <div className="min-h-screen bg-gray-200">
       {/* Header */}
       <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            if (onBack) {
+              onBack()
+            } else {
+              router.back()
+            }
+          }}
+          className="text-white hover:bg-gray-800"
+        >
           <ArrowLeft className="h-6 w-6" />
         </Button>
         <h1 className="text-2xl font-bold">Продаж товарів</h1>

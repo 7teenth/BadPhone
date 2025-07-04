@@ -9,7 +9,9 @@ const inter = Inter({ subsets: ["latin", "cyrillic"] })
 export const metadata: Metadata = {
   title: "BadPhone - Магазин мобільних аксесуарів",
   description: "Система управління продажами мобільних аксесуарів",
-    generator: 'v0.dev'
+  icons: {
+    icon: "/favicon.ico", // або /favicon.svg
+  },
 }
 
 export default function RootLayout({

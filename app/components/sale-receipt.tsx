@@ -1,54 +1,36 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Printer, Download, Plus } from "lucide-react"
-import type { CartItem, Sale } from "@/types/sale"
-
-
-/*interface CartItem {
-  id: number
-  name: string
-  category: string
-  price: number
-  quantity: number
-  description?: string
-  brand: string
-  model: string
-  created_at: Date
-  cartQuantity: number
-}
-
-interface Sale {
-  id: number
-  items: CartItem[]
-  total: number
-  date: Date
-  receiptNumber: string
-}*/
+import { Printer, Download, Plus, Home } from "lucide-react"
+import type { Sale } from "@/types/sale"
 
 interface SaleReceiptProps {
   sale: Sale
-  onBack: () => void
   onNewSale: () => void
+  onBack: () => void   // 👈 додай цю пропсу
 }
 
-export function SaleReceipt({ sale, onBack, onNewSale }: SaleReceiptProps) {
-  const handlePrint = () => {
-    window.print()
-  }
 
-  const handleDownload = () => {
-    // В реальном приложении здесь будет генерация PDF
-    console.log("Downloading receipt...")
-  }
+export function SaleReceipt({ sale, onNewSale, onBack }: SaleReceiptProps) {
+  const router = useRouter()
+
+  const handlePrint = () => window.print()
+  const handleDownload = () => console.log("Downloading receipt...")
 
   return (
     <div className="min-h-screen bg-gray-200">
       {/* Header */}
       <header className="bg-black text-white px-6 py-4 flex items-center gap-4 print:hidden">
-        <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
-          <ArrowLeft className="h-6 w-6" />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="text-white hover:bg-gray-800"
+          aria-label="На головну"
+        >
+          <Home className="h-6 w-6" />
         </Button>
         <h1 className="text-2xl font-bold">Чек продажу</h1>
         <div className="ml-auto flex gap-2">
@@ -100,15 +82,11 @@ export function SaleReceipt({ sale, onBack, onNewSale }: SaleReceiptProps) {
                   <div className="flex justify-between items-start">
                     <div className="flex-1 pr-2">
                       <p className="text-sm font-medium line-clamp-2">{item.name}</p>
-                      <p className="text-xs text-gray-600">
-                        {item.brand} {item.model}
-                      </p>
+                      <p className="text-xs text-gray-600">{item.brand} {item.model}</p>
                     </div>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span>
-                      {item.cartQuantity} шт × {item.price} ₴
-                    </span>
+                    <span>{item.cartQuantity} шт × {item.price} ₴</span>
                     <span className="font-medium">{(item.cartQuantity * item.price).toLocaleString()} ₴</span>
                   </div>
                   {index < sale.items.length - 1 && <hr className="border-dashed" />}
@@ -137,12 +115,20 @@ export function SaleReceipt({ sale, onBack, onNewSale }: SaleReceiptProps) {
           </CardContent>
         </Card>
 
-        {/* Action Buttons */}
+        {/* Buttons */}
         <div className="max-w-md mx-auto mt-6 flex gap-4 print:hidden">
-          <Button onClick={onBack} variant="outline" className="flex-1 bg-transparent">
-            Назад до продажів
-          </Button>
-          <Button onClick={onNewSale} className="flex-1 bg-green-600 hover:bg-green-700 text-white">
+          <Button
+  onClick={onBack} // 👈 виклик колбеку, не router.push
+  variant="outline"
+  className="flex-1 bg-transparent"
+>
+  На головну
+</Button>
+
+          <Button
+            onClick={onNewSale}
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Новий продаж
           </Button>

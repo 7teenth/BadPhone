@@ -17,9 +17,16 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
   const { sales, currentUser } = useApp()
   const [searchTerm, setSearchTerm] = useState("")
   const [paymentFilter, setPaymentFilter] = useState("all")
-  const [dateFilter, setDateFilter] = useState("all")
+
+  // Фильтруем только продажи за сегодня
+  const todayString = new Date().toDateString()
 
   const filteredSales = sales.filter((sale) => {
+    const saleDate = new Date(sale.created_at)
+    const isToday = saleDate.toDateString() === todayString
+
+    if (!isToday) return false
+
     const matchesSearch =
       sale.receipt_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sale.seller?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -27,27 +34,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
 
     const matchesPayment = paymentFilter === "all" || sale.payment_method === paymentFilter
 
-    const matchesDate = (() => {
-      if (dateFilter === "all") return true
-
-      const saleDate = new Date(sale.created_at)
-      const today = new Date()
-
-      switch (dateFilter) {
-        case "today":
-          return saleDate.toDateString() === today.toDateString()
-        case "week":
-          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-          return saleDate >= weekAgo
-        case "month":
-          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
-          return saleDate >= monthAgo
-        default:
-          return true
-      }
-    })()
-
-    return matchesSearch && matchesPayment && matchesDate
+    return matchesSearch && matchesPayment
   })
 
   const formatDate = (dateString: string) => {
@@ -81,7 +68,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
           <ArrowLeft className="h-6 w-6" />
         </Button>
-        <h1 className="text-2xl font-bold">Історія продажів</h1>
+        <h1 className="text-2xl font-bold">Історія продажів (Сьогодні)</h1>
       </header>
 
       {/* Content */}
@@ -89,7 +76,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         {/* Filters */}
         <Card>
           <CardContent className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
@@ -112,24 +99,11 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                 </SelectContent>
               </Select>
 
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Період" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Весь час</SelectItem>
-                  <SelectItem value="today">Сьогодні</SelectItem>
-                  <SelectItem value="week">Тиждень</SelectItem>
-                  <SelectItem value="month">Місяць</SelectItem>
-                </SelectContent>
-              </Select>
-
               <Button
                 variant="outline"
                 onClick={() => {
                   setSearchTerm("")
                   setPaymentFilter("all")
-                  setDateFilter("all")
                 }}
                 className="bg-transparent"
               >
