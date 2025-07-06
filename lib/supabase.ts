@@ -26,20 +26,7 @@ export interface User {
   store?: Store
 }
 
-export interface Product {
-  id: string
-  store_id: string
-  name: string
-  category: string
-  price: number
-  quantity: number
-  description?: string
-  brand: string
-  model: string
-  barcode?: string
-  created_at: string
-  updated_at: string
-}
+
 
 export interface Sale {
   id: string

@@ -1,21 +1,21 @@
 import React from "react"
 
-export const StoreType = () => {
-  return <React.Fragment />
-}
+
 
 // types.ts
 export interface Product {
-  id: number
-  store_id?: string
+  id: string // или number, выбери один тип и используй его везде
+  store_id?: string | null
   name: string
   category: string
   price: number
+  purchasePrice?: number
   quantity: number
   description?: string
   brand: string
   model: string
   barcode?: string
-  created_at: Date
-  updatedAt?: Date
+  created_at: string // лучше string, если работаешь с ISO датами
+  updatedAt?: string
 }
+

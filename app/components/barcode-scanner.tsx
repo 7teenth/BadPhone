@@ -14,6 +14,7 @@ interface Product {
   name: string
   category: string
   price: number
+  purchasePrice: number
   quantity: number
   description?: string
   brand: string
@@ -25,34 +26,66 @@ interface Product {
 
 interface BarcodeScannerProps {
   onClose: () => void
-  onProductAdded: (product: Omit<Product, "id" | "created_at">) => void
+  onProductAdded: (product: Omit<Product, "id" | "created_at"> & { store_id?: string | null }) => void
   stores: { id: string; name: string }[]
   currentUserStoreId: string | null
 }
 
+const CATEGORY_STORAGE_KEY = "barcodeScannerLastCategory"
+const STORE_STORAGE_KEY = "barcodeScannerLastStoreId"
+
 export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserStoreId }: BarcodeScannerProps) {
-  const [barcode, setBarcode] = useState("")
-  const [productData, setProductData] = useState({
-    name: "",
-    category: "",
-    price: "",
-    quantity: "",
-    description: "",
-    brand: "",
-    model: "",
+  const [productData, setProductData] = useState(() => {
+    let savedCategory: string | null = null
+    if (typeof window !== "undefined") {
+      savedCategory = localStorage.getItem(CATEGORY_STORAGE_KEY)
+    }
+    return {
+      name: "",
+      category: savedCategory || "Різне",
+      price: "",
+      purchasePrice: "",
+      quantity: "",
+      description: "",
+      brand: "",
+      model: "",
+    }
   })
-  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(currentUserStoreId || null)
+
+  const [barcode, setBarcode] = useState("")
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(STORE_STORAGE_KEY) || currentUserStoreId || null
+    }
+    return currentUserStoreId || null
+  })
+
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const categories = ["Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"]
+  const categories = [
+    "Захисне скло",
+    "Чохли",
+    "Зарядні пристрої",
+    "Навушники",
+    "PowerBank",
+    "Годинник",
+    "Колонки",
+    "Компʼютерна периферія",
+    "Автомобільні аксесуари",
+    "Освітлення",
+    "Різне",
+  ]
 
   const validateForm = () => {
     if (!productData.name.trim()) return "Назва товару обов'язкова"
     if (!productData.category) return "Оберіть категорію"
     if (!productData.price || isNaN(Number(productData.price)) || Number(productData.price) <= 0) {
       return "Введіть коректну ціну"
+    }
+    if (!productData.purchasePrice || isNaN(Number(productData.purchasePrice)) || Number(productData.purchasePrice) < 0) {
+      return "Введіть коректну ціну закупки"
     }
     if (!productData.quantity || isNaN(Number(productData.quantity)) || Number(productData.quantity) < 0) {
       return "Введіть коректну кількість"
@@ -61,6 +94,26 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
     if (!productData.model.trim()) return "Модель обов'язкова"
     if (!selectedStoreId) return "Оберіть магазин"
     return null
+  }
+
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newCategory = e.target.value
+    setProductData({ ...productData, category: newCategory })
+    if (typeof window !== "undefined") {
+      localStorage.setItem(CATEGORY_STORAGE_KEY, newCategory)
+    }
+  }
+
+  const handleStoreChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newStoreId = e.target.value || null
+    setSelectedStoreId(newStoreId)
+    if (typeof window !== "undefined") {
+      if (newStoreId) {
+        localStorage.setItem(STORE_STORAGE_KEY, newStoreId)
+      } else {
+        localStorage.removeItem(STORE_STORAGE_KEY)
+      }
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -78,6 +131,7 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
       name: productData.name.trim(),
       category: productData.category,
       price: Number(productData.price),
+      purchasePrice: Number(productData.purchasePrice),
       quantity: Number(productData.quantity),
       description: productData.description.trim(),
       brand: productData.brand.trim(),
@@ -89,19 +143,22 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
     onProductAdded(product)
     setSuccess("Товар успішно додано!")
 
-    // Очищаем форму
     setTimeout(() => {
+      const savedCategory = typeof window !== "undefined" ? localStorage.getItem(CATEGORY_STORAGE_KEY) : null
+      const savedStoreId = typeof window !== "undefined" ? localStorage.getItem(STORE_STORAGE_KEY) : null
+
       setBarcode("")
       setProductData({
         name: "",
-        category: "",
+        category: savedCategory || "Різне",
         price: "",
+        purchasePrice: "",
         quantity: "",
         description: "",
         brand: "",
         model: "",
       })
-      setSelectedStoreId(currentUserStoreId || null)
+      setSelectedStoreId(savedStoreId || currentUserStoreId || null)
       setSuccess("")
     }, 1500)
   }
@@ -139,7 +196,7 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
             <select
               id="store"
               value={selectedStoreId || ""}
-              onChange={(e) => setSelectedStoreId(e.target.value || null)}
+              onChange={handleStoreChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Оберіть магазин</option>
@@ -168,11 +225,10 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
                 <select
                   id="category"
                   value={productData.category}
-                  onChange={(e) => setProductData({ ...productData, category: e.target.value })}
+                  onChange={handleCategoryChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">Оберіть категорію</option>
-                  {["Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"].map((cat) => (
+                  {categories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -181,7 +237,7 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="brand">Бренд *</Label>
                 <Input
@@ -200,9 +256,6 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
                   placeholder="Введіть модель"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="price">Ціна (₴) *</Label>
                 <Input
@@ -212,6 +265,21 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
                   step="0.01"
                   value={productData.price}
                   onChange={(e) => setProductData({ ...productData, price: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="purchasePrice">Ціна закупки (₴) *</Label>
+                <Input
+                  id="purchasePrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={productData.purchasePrice}
+                  onChange={(e) => setProductData({ ...productData, purchasePrice: e.target.value })}
                   placeholder="0.00"
                 />
               </div>
@@ -241,14 +309,14 @@ export function BarcodeScanner({ onClose, onProductAdded, stores, currentUserSto
             </div>
 
             {error && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
 
             {success && (
-              <Alert className="border-green-200 bg-green-50">
+              <Alert className="border-green-200 bg-green-50 flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800">{success}</AlertDescription>
               </Alert>

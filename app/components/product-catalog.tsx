@@ -10,19 +10,7 @@ import { ProductForm } from "./product-form"
 import { DeleteConfirmDialog } from "./delete-confirm-dialog"
 import { BarcodeScanner } from "./barcode-scanner"
 import { useApp } from "../context/app-context"
-
-export interface Product {
-  id: string
-  name: string
-  category: string
-  price: number
-  quantity: number
-  description?: string
-  brand: string
-  model: string
-  created_at: string // ISO string
-  barcode?: string
-}
+import type { Product } from "@/lib/types"
 
 interface ProductCatalogProps {
   onBack: () => void
@@ -38,7 +26,20 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [deleteProductState, setDeleteProductState] = useState<Product | null>(null)
 
-  const categories = ["Всі", "Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"]
+  const categories = [
+    "Всі",
+    "Захисне скло",
+    "Чохли",
+    "Зарядні пристрої",
+    "Навушники",
+    "PowerBank",
+    "Годинник",
+    "Колонки",
+    "Компʼютерна периферія",
+    "Автомобільні аксесуари",
+    "Освітлення",
+    "Різне",
+  ]
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
@@ -50,14 +51,26 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     return matchesSearch && matchesCategory
   })
 
-  const handleAddProduct = async (productData: Omit<Product, "id" | "created_at">) => {
-    await addProduct(productData)
+  const handleAddProduct = async (
+    productData: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id?: string | null }
+  ) => {
+    const productWithStoreId = {
+      ...productData,
+      store_id: productData.store_id ?? "",
+    }
+    await addProduct(productWithStoreId)
     setShowProductForm(false)
   }
 
-  const handleEditProduct = async (productData: Omit<Product, "id" | "created_at">) => {
+  const handleEditProduct = async (
+    productData: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id?: string | null }
+  ) => {
     if (editingProduct) {
-      await updateProduct(editingProduct.id, productData)
+      const productWithStoreId = {
+        ...productData,
+        store_id: productData.store_id ?? "",
+      }
+      await updateProduct(editingProduct.id, productWithStoreId)
       setEditingProduct(null)
       setShowProductForm(false)
     }
@@ -79,13 +92,10 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     setShowProductForm(true)
   }
 
-  const handleBarcodeProductAdded = (productData: Omit<Product, "id" | "created_at"> & { store_id: string | null }) => {
-  handleAddProduct(productData)
-  setShowBarcodeScanner(false)
-}
-
-
-  console.log("products from context:", products)
+  const handleBarcodeProductAdded = (productData: Omit<Product, "id" | "created_at"> & { store_id?: string | null }) => {
+    handleAddProduct(productData)
+    setShowBarcodeScanner(false)
+  }
 
   // Проверяем права доступа (например, только "owner" может управлять)
   const canManageProducts = currentUser?.role === "owner"
@@ -242,14 +252,13 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
 
       {/* Barcode Scanner Modal */}
       {showBarcodeScanner && (
-  <BarcodeScanner
-    onClose={() => setShowBarcodeScanner(false)}
-    onProductAdded={handleBarcodeProductAdded}
-    stores={stores || []}
-    currentUserStoreId={currentUser?.store_id || null}
-  />
-)}
-
+        <BarcodeScanner
+          onClose={() => setShowBarcodeScanner(false)}
+          onProductAdded={handleBarcodeProductAdded}
+          stores={stores || []}
+          currentUserStoreId={currentUser?.store_id || null}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       {deleteProductState && (

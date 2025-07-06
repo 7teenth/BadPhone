@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Save } from "lucide-react"
-import type { Product } from "./product-catalog"
+import type { Product } from "@/lib/types"
+
 
 interface ProductFormProps {
   product?: Product | null
@@ -18,20 +18,44 @@ interface ProductFormProps {
   onCancel: () => void
 }
 
+type FormData = {
+  name: string
+  category: string
+  price: string
+  purchasePrice: string
+  quantity: string
+  description: string
+  brand: string
+  model: string
+}
+
 export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     category: "",
     price: "",
+    purchasePrice: "",
     quantity: "",
     description: "",
     brand: "",
     model: "",
   })
 
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<keyof FormData, string>>({} as Record<keyof FormData, string>)
 
-  const categories = ["Чохли", "Зарядки", "Навушники", "Захисні скла", "Power Bank", "Тримачі"]
+  const categories = [
+    "Захисне скло",
+    "Чохли",
+    "Зарядні пристрої",
+    "Навушники",
+    "PowerBank",
+    "Годинник",
+    "Колонки",
+    "Компʼютерна периферія",
+    "Автомобільні аксесуари",
+    "Освітлення",
+    "Різне",
+  ]
 
   useEffect(() => {
     if (product) {
@@ -39,16 +63,18 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
         name: product.name,
         category: product.category,
         price: product.price.toString(),
+        purchasePrice: product.purchasePrice?.toString() ?? "",
         quantity: product.quantity.toString(),
-        description: product.description,
+        description: product.description ?? "",
         brand: product.brand,
         model: product.model,
       })
+      setErrors({} as Record<keyof FormData, string>)
     }
   }, [product])
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Partial<Record<keyof FormData, string>> = {}
 
     if (!formData.name.trim()) {
       newErrors.name = "Назва товару обов'язкова"
@@ -60,6 +86,14 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
 
     if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
       newErrors.price = "Введіть коректну ціну"
+    }
+
+    if (
+      formData.purchasePrice === "" ||
+      isNaN(Number(formData.purchasePrice)) ||
+      Number(formData.purchasePrice) < 0
+    ) {
+      newErrors.purchasePrice = "Введіть коректну ціну закупки"
     }
 
     if (!formData.quantity || isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0) {
@@ -74,31 +108,28 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
       newErrors.model = "Модель обов'язкова"
     }
 
-    setErrors(newErrors)
+    setErrors(newErrors as Record<keyof FormData, string>)
     return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm()) {
-      return
-    }
+    if (!validateForm()) return
 
-    const productData = {
+    onSave({
       name: formData.name.trim(),
       category: formData.category,
       price: Number(formData.price),
+      purchasePrice: Number(formData.purchasePrice),
       quantity: Number(formData.quantity),
       description: formData.description.trim(),
       brand: formData.brand.trim(),
       model: formData.model.trim(),
-    }
-
-    onSave(productData)
+    })
   }
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
@@ -122,8 +153,8 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
             <CardTitle>{product ? "Редагування товару" : "Новий товар"}</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Product Name */}
+            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+              {/* Назва */}
               <div className="space-y-2">
                 <Label htmlFor="name">Назва товару *</Label>
                 <Input
@@ -136,17 +167,20 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
                 {errors.name && <p className="text-red-500 text-sm">{errors.name}</p>}
               </div>
 
-              {/* Category */}
+              {/* Категорія */}
               <div className="space-y-2">
                 <Label htmlFor="category">Категорія *</Label>
-                <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value) => handleInputChange("category", value)}
+                >
                   <SelectTrigger className={errors.category ? "border-red-500" : ""}>
                     <SelectValue placeholder="Оберіть категорію" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
+                    {categories.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {cat}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -154,7 +188,7 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
                 {errors.category && <p className="text-red-500 text-sm">{errors.category}</p>}
               </div>
 
-              {/* Brand and Model */}
+              {/* Бренд та Модель */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="brand">Бренд *</Label>
@@ -180,8 +214,8 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
                 </div>
               </div>
 
-              {/* Price and Quantity */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Ціна, Ціна закупки та Кількість */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="price">Ціна (₴) *</Label>
                   <Input
@@ -196,6 +230,22 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
                   />
                   {errors.price && <p className="text-red-500 text-sm">{errors.price}</p>}
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="purchasePrice">Ціна закупки (₴) *</Label>
+                  <Input
+                    id="purchasePrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.purchasePrice}
+                    onChange={(e) => handleInputChange("purchasePrice", e.target.value)}
+                    placeholder="0.00"
+                    className={errors.purchasePrice ? "border-red-500" : ""}
+                  />
+                  {errors.purchasePrice && <p className="text-red-500 text-sm">{errors.purchasePrice}</p>}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="quantity">Кількість *</Label>
                   <Input
@@ -211,7 +261,7 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
                 </div>
               </div>
 
-              {/* Description */}
+              {/* Опис */}
               <div className="space-y-2">
                 <Label htmlFor="description">Опис</Label>
                 <Textarea
@@ -223,7 +273,7 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
                 />
               </div>
 
-              {/* Action Buttons */}
+              {/* Кнопки дії */}
               <div className="flex gap-4 pt-4">
                 <Button type="submit" className="bg-black hover:bg-gray-800 text-white flex-1">
                   <Save className="h-4 w-4 mr-2" />

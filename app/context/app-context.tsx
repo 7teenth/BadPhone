@@ -311,12 +311,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const loadProducts = async () => {
+const loadProducts = async () => {
     if (!isOnline || !currentUser) return
-
     try {
       let data, error
-
       if (currentUser.role === "owner") {
         const res = await supabase.from("products").select("*")
         data = res.data
@@ -326,12 +324,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         data = res.data
         error = res.error
       }
-
       if (error) throw error
-
-      if (data) {
-        setProducts(data)
-      }
+      if (data) setProducts(data)
     } catch (error) {
       console.error("Error loading products:", error)
     }
@@ -552,13 +546,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateProduct = async (id: string, product: Partial<Product>): Promise<void> => {
     if (!isOnline) return
 
-    try {
-      const { data, error } = await supabase.from("products").update(product).eq("id", id).select().maybeSingle()
+    const cleanProductEntries = Object.entries(product).filter(([key, value]) => {
+  if (value === undefined) return false;
+  if (key.endsWith("_id") && (value === "" || value === null)) return false; // убираем пустые UUID
+  if (value === "") return false; // убираем все пустые строки, если не нужны
+  return true;
+});
+const cleanProduct = Object.fromEntries(cleanProductEntries);
 
-      if (error) {
-        console.error("Error updating product:", error)
-        return
-      }
+
+    if (!id || Object.keys(cleanProduct).length === 0) {
+      console.warn("updateProduct skipped: invalid id or empty product")
+      return
+    }
+
+    console.log("Updating product:", { id, cleanProduct })
+
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .update(cleanProduct)
+        .eq("id", id)
+        .select()
+        .maybeSingle()
+
+if (error) {
+  console.error("Error updating product (full error):", JSON.stringify(error, null, 2));
+  return;
+}
+
 
       if (data) {
         setProducts((prev) => prev.map((p) => (p.id === id ? data : p)))
@@ -567,6 +583,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("updateProduct failed:", error)
     }
   }
+
 
   const deleteProduct = async (id: string): Promise<void> => {
     if (!isOnline) return
@@ -754,7 +771,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteUser = async (userId: string): Promise<boolean> => {
     if (!isOnline) return false
-
     try {
       const { error } = await supabase.from("users").delete().eq("id", userId)
       if (error) {
@@ -792,16 +808,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         deleteProduct,
         startShift,
         endShift,
-        isShiftActive,
-        getHourlyEarnings,
+        isShiftActive: Boolean(currentShift && !currentShift.end_time),
+        getHourlyEarnings: () => {
+          if (!currentShift) return 0
+          const totalMinutes = workingHours * 60 + workingMinutes
+          if (totalMinutes === 0) return 0
+          return totalSalesAmount / (totalMinutes / 60)
+        },
         login,
         logout,
         register,
         deleteUser,
-        getDailySalesStats,
-        getTotalStats,
+        getDailySalesStats: () => {
+          const statsMap: Record<string, number> = {}
+          sales.forEach((sale) => {
+            const date = new Date(sale.created_at).toLocaleDateString("uk-UA")
+            statsMap[date] = (statsMap[date] || 0) + sale.total_amount
+          })
+          return Object.entries(statsMap).map(([date, amount]) => ({ date, amount }))
+        },
+        getTotalStats: () => {
+          const totalAmount = sales.reduce((sum, sale) => sum + sale.total_amount, 0)
+          return { totalAmount, salesCount: sales.length }
+        },
+        getShiftStats: () => {
+          if (!currentShift) return null
+          const start = new Date(currentShift.start_time)
+          const end = currentShift.end_time ? new Date(currentShift.end_time) : new Date()
+          const salesDuringShift = sales.filter((s) => {
+            const created = new Date(s.created_at)
+            return created >= start && created <= end
+          })
+          const totalAmount = salesDuringShift.reduce((sum, s) => sum + s.total_amount, 0)
+          const cashAmount = salesDuringShift
+            .filter((s) => s.payment_method === "cash")
+            .reduce((sum, s) => sum + s.total_amount, 0)
+          const terminalAmount = salesDuringShift
+            .filter((s) => s.payment_method === "terminal")
+            .reduce((sum, s) => sum + s.total_amount, 0)
+          const count = salesDuringShift.length
+          const totalItems = salesDuringShift.reduce((sum, s) => sum + s.items_data.length, 0)
+          const avgCheck = count > 0 ? totalAmount / count : 0
+          return { start, end, totalAmount, cashAmount, terminalAmount, count, totalItems, avgCheck }
+        },
         loadData,
-        getShiftStats,
       }}
     >
       {children}
