@@ -21,6 +21,7 @@ import { SaleReceipt } from "./sale-receipt"
 import { useApp } from "../context/app-context"
 import { Label } from "@/components/ui/label"
 import type { CartItem, Sale } from "@/types/sale"
+import { supabase } from "@/lib/supabase"
 
 interface SellPageProps {
   onBack?: () => void
@@ -95,7 +96,6 @@ const SellPage = ({ onBack }: SellPageProps) => {
       payment_method: paymentMethod,
     }
 
-    // Добавляем продажу в контекст приложения
     addSale({
       receipt_number: receiptNumber,
       total_amount: getTotalAmount(),
@@ -120,38 +120,47 @@ const SellPage = ({ onBack }: SellPageProps) => {
     setCart([])
   }
 
-  if (showReceipt && currentSale) {
-  return (
-    <SaleReceipt
-      sale={currentSale}
-      onNewSale={() => {
-        setShowReceipt(false)
-        setCurrentSale(null)
-      }}
-      onBack={() => {
-        setShowReceipt(false)
-        setCurrentSale(null)
-        onBack?.() // вызываем только если onBack передан
-      }}
-    />
-  )
-}
+  const handleBarcodeAutoAdd = async (input: string) => {
+    if (!/^\d{6,}$/.test(input)) return
+    if (cart.some((item) => item.barcode === input)) return
 
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("barcode", input)
+      .limit(1)
+      .single()
+
+    if (data && !error) {
+      addToCart(data)
+      setSearchTerm("") // сбрасываем поле после добавления
+    }
+  }
+
+  if (showReceipt && currentSale) {
+    return (
+      <SaleReceipt
+        sale={currentSale}
+        onNewSale={() => {
+          setShowReceipt(false)
+          setCurrentSale(null)
+        }}
+        onBack={() => {
+          setShowReceipt(false)
+          setCurrentSale(null)
+          onBack?.()
+        }}
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-200">
-      {/* Header */}
       <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => {
-            if (onBack) {
-              onBack()
-            } else {
-              router.back()
-            }
-          }}
+          onClick={() => (onBack ? onBack() : router.back())}
           className="text-white hover:bg-gray-800"
         >
           <ArrowLeft className="h-6 w-6" />
@@ -166,22 +175,23 @@ const SellPage = ({ onBack }: SellPageProps) => {
       </header>
 
       <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)]">
-        {/* Products Section */}
         <div className="flex-1 p-6 overflow-y-auto">
           <div className="space-y-6">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 type="search"
-                placeholder="Пошук товарів для продажу..."
+                placeholder="Пошук по назві або штрихкоду..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setSearchTerm(value)
+                  handleBarcodeAutoAdd(value)
+                }}
                 className="pl-10"
               />
             </div>
 
-            {/* Products Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredProducts.map((product) => (
                 <Card key={product.id} className="hover:shadow-md transition-shadow">
@@ -227,7 +237,6 @@ const SellPage = ({ onBack }: SellPageProps) => {
           </div>
         </div>
 
-        {/* Cart Section */}
         <div className="lg:w-96 bg-white border-l border-gray-200 flex flex-col">
           <div className="p-6 border-b">
             <div className="flex justify-between items-center">
@@ -303,11 +312,9 @@ const SellPage = ({ onBack }: SellPageProps) => {
             )}
           </div>
 
-          {/* Cart Total and Checkout */}
           {cart.length > 0 && (
             <div className="p-6 border-t bg-gray-50">
               <div className="space-y-4">
-                {/* Payment Method Selection */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Спосіб оплати:</Label>
                   <div className="grid grid-cols-2 gap-2">

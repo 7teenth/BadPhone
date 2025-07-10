@@ -110,7 +110,7 @@ interface AppContextType extends AppState {
   deleteUser: (userId: string) => Promise<boolean>
   getDailySalesStats: () => any[]
   getTotalStats: () => any
-  loadData: () => Promise<void>
+  loadData: (user: User | null) => Promise<void>
   getShiftStats: () => {
     start: Date
     end: Date
@@ -212,124 +212,129 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Автоматическая загрузка данных при авторизации и онлайн
   useEffect(() => {
-    if (isAuthenticated && isOnline) {
-      loadData()
+    if (isAuthenticated && isOnline && currentUser) {
+      loadData(currentUser)
     }
   }, [isAuthenticated, isOnline])
 
   // Загрузка основных данных (пользователи, товары, продажи, визиты)
-  const loadData = async () => {
-    if (!isOnline) return
-    try {
-      const { data: storesData } = await supabase.from("stores").select("*")
-      if (storesData) setStores(storesData)
+  const loadData = async (user: User | null) => {
+    
 
-      const { data: usersData } = await supabase.from("users").select("*")
-      if (usersData) {
-        const usersWithStores = usersData.map((user) => {
-          const store = storesData?.find((s) => s.id === user.store_id)
-          return { ...user, store }
-        })
-        setUsers(usersWithStores)
+  if (!isOnline) return
+  try {
+    const { data: storesData } = await supabase.from("stores").select("*")
+    if (storesData) setStores(storesData)
+
+    const { data: usersData } = await supabase.from("users").select("*")
+    if (usersData) {
+      const usersWithStores = usersData.map((userItem) => {
+        const store = storesData?.find((s) => s.id === userItem.store_id)
+        return { ...userItem, store }
+      })
+      setUsers(usersWithStores)
+    }
+
+    if (user) {
+  await loadProducts(user)
+}
+
+    const recalcTotalSalesAmount = (salesList: Sale[]) => {
+      const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
+      setTotalSalesAmount(total)
+    }
+
+    if (user) {
+      const { data: shiftData } = await supabase
+        .from("shifts")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("end_time", null)
+        .maybeSingle()
+
+      setCurrentShift(shiftData || null)
+
+      if (!shiftData) {
+        setSales([])
+        setTotalSalesAmount(0)
+        return
       }
 
-      await loadProducts()
+      if (user.role === "owner") {
+        const { data: productsData } = await supabase.from("products").select("*")
+        const { data: salesData } = await supabase.from("sales").select("*")
+        const { data: visitsData } = await supabase.from("visits").select("*")
 
-      const recalcTotalSalesAmount = (salesList: Sale[]) => {
-        const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
-        setTotalSalesAmount(total)
-      }
-
-      if (currentUser) {
-        // Подгружаем текущую открытую смену, если есть (без фильтра на end_time, т.к. end_time=null при открытой смене)
-        const { data: shiftData } = await supabase
-          .from("shifts")
+        if (productsData) setProducts(productsData)
+        if (salesData) {
+          const salesWithSellers = salesData.map((sale) => {
+            const seller = usersData?.find((u) => u.id === sale.seller_id)
+            return { ...sale, seller }
+          })
+          setSales(salesWithSellers)
+          recalcTotalSalesAmount(salesWithSellers)
+        }
+        if (visitsData) {
+          const visitsWithSellers = visitsData.map((visit) => {
+            const seller = usersData?.find((u) => u.id === visit.seller_id)
+            return { ...visit, seller }
+          })
+          setVisits(visitsWithSellers)
+        }
+      } else if (user.store_id) {
+        const { data: productsData } = await supabase
+          .from("products")
           .select("*")
-          .eq("user_id", currentUser.id)
-          .is("end_time", null)
-          .maybeSingle()
+          .eq("store_id", user.store_id)
+        const { data: salesData } = await supabase.from("sales").select("*").eq("store_id", user.store_id)
+        const { data: visitsData } = await supabase.from("visits").select("*").eq("store_id", user.store_id)
 
-        setCurrentShift(shiftData || null)
-
-        if (!shiftData) {
-          setSales([])
-          setTotalSalesAmount(0)
-          // Не очищаем visits, чтобы они отображались
-          // setVisits([])
-          return
+        if (productsData) setProducts(productsData)
+        if (salesData) {
+          const salesWithSellers = salesData.map((sale) => {
+            const seller = usersData?.find((u) => u.id === sale.seller_id)
+            return { ...sale, seller }
+          })
+          setSales(salesWithSellers)
+          recalcTotalSalesAmount(salesWithSellers)
         }
-
-        if (currentUser.role === "owner") {
-          const { data: productsData } = await supabase.from("products").select("*")
-          const { data: salesData } = await supabase.from("sales").select("*")
-          const { data: visitsData } = await supabase.from("visits").select("*")
-
-          if (productsData) setProducts(productsData)
-          if (salesData) {
-            const salesWithSellers = salesData.map((sale) => {
-              const seller = usersData?.find((u) => u.id === sale.seller_id)
-              return { ...sale, seller }
-            })
-            setSales(salesWithSellers)
-            recalcTotalSalesAmount(salesWithSellers)
-          }
-          if (visitsData) {
-            const visitsWithSellers = visitsData.map((visit) => {
-              const seller = usersData?.find((u) => u.id === visit.seller_id)
-              return { ...visit, seller }
-            })
-            setVisits(visitsWithSellers)
-          }
-        } else if (currentUser.store_id) {
-          const { data: productsData } = await supabase
-            .from("products")
-            .select("*")
-            .eq("store_id", currentUser.store_id)
-          const { data: salesData } = await supabase.from("sales").select("*").eq("store_id", currentUser.store_id)
-          const { data: visitsData } = await supabase.from("visits").select("*").eq("store_id", currentUser.store_id)
-
-          if (productsData) setProducts(productsData)
-          if (salesData) {
-            const salesWithSellers = salesData.map((sale) => {
-              const seller = usersData?.find((u) => u.id === sale.seller_id)
-              return { ...sale, seller }
-            })
-            setSales(salesWithSellers)
-            recalcTotalSalesAmount(salesWithSellers)
-          }
-          if (visitsData) {
-            const visitsWithSellers = visitsData.map((visit) => {
-              const seller = usersData?.find((u) => u.id === visit.seller_id)
-              return { ...visit, seller }
-            })
-            setVisits(visitsWithSellers)
-          }
+        if (visitsData) {
+          const visitsWithSellers = visitsData.map((visit) => {
+            const seller = usersData?.find((u) => u.id === visit.seller_id)
+            return { ...visit, seller }
+          })
+          setVisits(visitsWithSellers)
         }
       }
-    } catch (error) {
-      console.error("Error loading data:", error)
     }
+  } catch (error) {
+    console.error("Error loading data:", error)
   }
+}
 
-const loadProducts = async () => {
-    if (!isOnline || !currentUser) return
-    try {
-      let data, error
-      if (currentUser.role === "owner") {
-        const res = await supabase.from("products").select("*")
-        data = res.data
-        error = res.error
-      } else if (currentUser.store_id) {
-        const res = await supabase.from("products").select("*").eq("store_id", currentUser.store_id)
-        data = res.data
-        error = res.error
-      }
-      if (error) throw error
-      if (data) setProducts(data)
-    } catch (error) {
-      console.error("Error loading products:", error)
+
+
+
+const loadProducts = async (user: User) => {
+  if (!isOnline || !user) return
+  try {
+    let data, error
+    if (user.role === "owner") {
+      const res = await supabase.from("products").select("*")
+      data = res.data
+      error = res.error
+    } else if (user.store_id) {
+      const res = await supabase.from("products").select("*").eq("store_id", user.store_id)
+      data = res.data
+      error = res.error
     }
+    if (error) throw error
+    if (data) setProducts(data)
+  } catch (error) {
+    console.error("Error loading products:", error)
   }
+}
+
 
   const login = async (
   login: string,
@@ -386,7 +391,7 @@ const loadProducts = async () => {
     setIsAuthenticated(true)
 
     // 🧠 Завантажуємо все інше вже з нормальним контекстом
-    await loadData()
+    await loadData(userWithStore)
 
     return true
   } catch (error) {
@@ -445,7 +450,9 @@ const loadProducts = async () => {
         return false
       }
 
-      await loadData()
+      
+
+      await loadData(currentUser)
       return true
     } catch (error) {
       console.error("Registration error:", error)
@@ -777,7 +784,7 @@ if (error) {
         console.error("Error deleting user:", error)
         return false
       }
-      await loadData()
+      await loadData(currentUser)
       return true
     } catch (error) {
       console.error("deleteUser failed:", error)

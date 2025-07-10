@@ -9,6 +9,7 @@ export interface CartItem {
   model: string
   description?: string
   created_at?: string // якщо потрібно
+   barcode?: string
 }
 
 export interface Sale {

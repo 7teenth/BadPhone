@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -62,6 +62,12 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     terminalAmount: 0,
   }
 
+  // Логирование для диагностики
+  useEffect(() => {
+    console.log("AdminDashboard: dailyStats", dailyStats)
+    console.log("AdminDashboard: totalStats", totalStats)
+  }, [dailyStats, totalStats])
+
   const [selectedPeriod, setSelectedPeriod] = useState("7days") // можно использовать для фильтра по периоду
 
   const formatCurrency = (amount?: number) => {
@@ -92,9 +98,12 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       })
     })
 
-    return Object.entries(sellerStats)
+    const sortedSellers = Object.entries(sellerStats)
       .map(([id, stats]) => ({ id, ...stats }))
       .sort((a, b) => b.amount - a.amount)
+
+    console.log("AdminDashboard: topSellers", sortedSellers)
+    return sortedSellers
   }
 
   const topSellers = getTopSellers()
