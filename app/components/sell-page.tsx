@@ -16,11 +16,12 @@ import {
   Receipt,
   Banknote,
   CreditCard,
+  Percent,
 } from "lucide-react"
 import { SaleReceipt } from "./sale-receipt"
 import { useApp } from "../context/app-context"
 import { Label } from "@/components/ui/label"
-import type { CartItem, Sale } from "@/types/sale"
+import type { CartItem, Sale, SaleInput } from "@/types/sale"
 import { supabase } from "@/lib/supabase"
 
 interface SellPageProps {
@@ -29,13 +30,14 @@ interface SellPageProps {
 
 const SellPage = ({ onBack }: SellPageProps) => {
   const router = useRouter()
-
   const [searchTerm, setSearchTerm] = useState("")
   const [cart, setCart] = useState<CartItem[]>([])
   const [showReceipt, setShowReceipt] = useState(false)
   const [currentSale, setCurrentSale] = useState<Sale | null>(null)
   const { addSale, products } = useApp()
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "terminal">("cash")
+  const [discountInput, setDiscountInput] = useState("")
+  const discount = parseFloat(discountInput) || 0
 
   const filteredProducts = products
     .filter(
@@ -46,21 +48,22 @@ const SellPage = ({ onBack }: SellPageProps) => {
     )
     .filter((product) => product.quantity > 0)
 
-  const addToCart = (product: any) => {
-    const existingItem = cart.find((item) => item.id === product.id)
-
-    if (existingItem) {
-      if (existingItem.cartQuantity < product.quantity) {
-        setCart(
-          cart.map((item) =>
-            item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item,
-          ),
-        )
-      }
-    } else {
-      setCart([...cart, { ...product, cartQuantity: 1 }])
+  const addToCart = (product: Omit<CartItem, "cartQuantity">) => {
+  const existingItem = cart.find((item) => item.id === product.id)
+  if (existingItem) {
+    if (existingItem.cartQuantity < product.quantity) {
+      setCart(
+        cart.map((item) =>
+          item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item,
+        ),
+      )
     }
+  } else {
+    setCart([...cart, { ...product, cartQuantity: 1 }])
   }
+}
+
+
 
   const updateCartQuantity = (productId: string, newQuantity: number) => {
     if (newQuantity === 0) {
@@ -69,7 +72,9 @@ const SellPage = ({ onBack }: SellPageProps) => {
       const product = products.find((p) => p.id === productId)
       if (product && newQuantity <= product.quantity) {
         setCart(
-          cart.map((item) => (item.id === productId ? { ...item, cartQuantity: newQuantity } : item)),
+          cart.map((item) =>
+            item.id === productId ? { ...item, cartQuantity: newQuantity } : item,
+          ),
         )
       }
     }
@@ -80,25 +85,20 @@ const SellPage = ({ onBack }: SellPageProps) => {
   }
 
   const getTotalAmount = () => {
-    return cart.reduce((total, item) => total + item.price * item.cartQuantity, 0)
+    const total = cart.reduce((sum, item) => sum + item.price * item.cartQuantity, 0)
+    return Math.max(total - discount, 0)
   }
 
   const completeSale = () => {
     if (cart.length === 0) return
 
     const receiptNumber = `RCP-${Date.now()}`
-    const sale: Sale = {
-      id: Date.now(),
-      items: [...cart],
-      total: getTotalAmount(),
-      date: new Date(),
-      receiptNumber,
-      payment_method: paymentMethod,
-    }
+    const totalAmount = getTotalAmount()
 
-    addSale({
+    const saleInput: SaleInput = {
       receipt_number: receiptNumber,
-      total_amount: getTotalAmount(),
+      total_amount: totalAmount,
+      discount,
       items_data: cart.map((item) => ({
         product_id: item.id,
         quantity: item.cartQuantity,
@@ -109,19 +109,33 @@ const SellPage = ({ onBack }: SellPageProps) => {
       })),
       payment_method: paymentMethod,
       seller_id: undefined,
-    })
+    }
+
+    addSale(saleInput)
+
+    const sale: Sale = {
+      id: Date.now(),
+      items: [...cart],
+      total: totalAmount,
+      date: new Date(),
+      receiptNumber: receiptNumber,
+      payment_method: paymentMethod,
+      discount,
+    }
 
     setCurrentSale(sale)
     setShowReceipt(true)
     setCart([])
+    setDiscountInput("")
   }
 
   const clearCart = () => {
     setCart([])
+    setDiscountInput("")
   }
 
   const handleBarcodeAutoAdd = async (input: string) => {
-    if (!/^\d{6,}$/.test(input)) return
+    if (!/\d{6,}/.test(input)) return
     if (cart.some((item) => item.barcode === input)) return
 
     const { data, error } = await supabase
@@ -133,7 +147,7 @@ const SellPage = ({ onBack }: SellPageProps) => {
 
     if (data && !error) {
       addToCart(data)
-      setSearchTerm("") // сбрасываем поле после добавления
+      setSearchTerm("")
     }
   }
 
@@ -243,8 +257,7 @@ const SellPage = ({ onBack }: SellPageProps) => {
               <h2 className="text-xl font-bold">Кошик</h2>
               {cart.length > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearCart} className="text-red-600">
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Очистити
+                  <Trash2 className="h-4 w-4 mr-1" /> Очистити
                 </Button>
               )}
             </div>
@@ -268,38 +281,19 @@ const SellPage = ({ onBack }: SellPageProps) => {
                           {item.brand} {item.model}
                         </p>
                       </div>
-
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-green-600">{item.price} ₴</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeFromCart(item.id)}
-                          className="h-6 w-6 text-red-600"
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="h-6 w-6 text-red-600">
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
-
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => updateCartQuantity(item.id, item.cartQuantity - 1)}
-                            className="h-8 w-8"
-                            disabled={item.cartQuantity <= 1}
-                          >
+                          <Button variant="outline" size="icon" onClick={() => updateCartQuantity(item.id, item.cartQuantity - 1)} className="h-8 w-8" disabled={item.cartQuantity <= 1}>
                             <Minus className="h-3 w-3" />
                           </Button>
                           <span className="w-8 text-center font-medium">{item.cartQuantity}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => updateCartQuantity(item.id, item.cartQuantity + 1)}
-                            className="h-8 w-8"
-                            disabled={item.cartQuantity >= item.quantity}
-                          >
+                          <Button variant="outline" size="icon" onClick={() => updateCartQuantity(item.id, item.cartQuantity + 1)} className="h-8 w-8" disabled={item.cartQuantity >= item.quantity}>
                             <Plus className="h-3 w-3" />
                           </Button>
                         </div>
@@ -313,49 +307,60 @@ const SellPage = ({ onBack }: SellPageProps) => {
           </div>
 
           {cart.length > 0 && (
-            <div className="p-6 border-t bg-gray-50">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Спосіб оплати:</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant={paymentMethod === "cash" ? "default" : "outline"}
-                      onClick={() => setPaymentMethod("cash")}
-                      className={`text-sm ${paymentMethod === "cash" ? "bg-orange-600 hover:bg-orange-700" : ""}`}
-                    >
-                      <Banknote className="h-4 w-4 mr-1" />
-                      Готівка
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={paymentMethod === "terminal" ? "default" : "outline"}
-                      onClick={() => setPaymentMethod("terminal")}
-                      className={`text-sm ${paymentMethod === "terminal" ? "bg-purple-600 hover:bg-purple-700" : ""}`}
-                    >
-                      <CreditCard className="h-4 w-4 mr-1" />
-                      Термінал
-                    </Button>
-                  </div>
+            <div className="p-6 border-t bg-gray-50 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Сума знижки</Label>
+                <div className="relative">
+                  <Percent className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₴</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={discountInput}
+                    onChange={(e) => setDiscountInput(e.target.value)}
+                    placeholder="Введи знижку в гривнях"
+                    className="pl-10 pr-8 focus:ring-2 focus:ring-orange-400 focus:border-orange-500"
+                  />
                 </div>
-
-                <div className="flex justify-between items-center text-lg font-bold">
-                  <span>Загальна сума:</span>
-                  <span className="text-green-600">{getTotalAmount().toLocaleString()} ₴</span>
-                </div>
-
-                <div className="text-sm text-gray-600">
-                  <div className="flex justify-between">
-                    <span>Товарів:</span>
-                    <span>{cart.reduce((sum, item) => sum + item.cartQuantity, 0)} шт</span>
-                  </div>
-                </div>
-
-                <Button onClick={completeSale} className="w-full bg-green-600 hover:bg-green-700 text-white" size="lg">
-                  <Receipt className="h-4 w-4 mr-2" />
-                  Оформити продаж
-                </Button>
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Спосіб оплати:</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={paymentMethod === "cash" ? "default" : "outline"}
+                    onClick={() => setPaymentMethod("cash")}
+                    className={`text-sm ${paymentMethod === "cash" ? "bg-orange-600 hover:bg-orange-700" : ""}`}
+                  >
+                    <Banknote className="h-4 w-4 mr-1" /> Готівка
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={paymentMethod === "terminal" ? "default" : "outline"}
+                    onClick={() => setPaymentMethod("terminal")}
+                    className={`text-sm ${paymentMethod === "terminal" ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                  >
+                    <CreditCard className="h-4 w-4 mr-1" /> Термінал
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-lg font-bold">
+                <span>Загальна сума:</span>
+                <span className="text-green-600">{getTotalAmount().toLocaleString()} ₴</span>
+              </div>
+
+              <div className="text-sm text-gray-600">
+                <div className="flex justify-between">
+                  <span>Товарів:</span>
+                  <span>{cart.reduce((sum, item) => sum + item.cartQuantity, 0)} шт</span>
+                </div>
+              </div>
+
+              <Button onClick={completeSale} className="w-full bg-green-600 hover:bg-green-700 text-white" size="lg">
+                <Receipt className="h-4 w-4 mr-2" /> Оформити продаж
+              </Button>
             </div>
           )}
         </div>
