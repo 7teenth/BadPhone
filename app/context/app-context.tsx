@@ -121,6 +121,7 @@ interface AppContextType extends AppState {
     totalItems: number
     avgCheck: number
   } | null
+  currentStoreId: string | null // <-- вот это добавлено!
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -141,7 +142,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
 
-  // Загрузка магазинов из базы
+  // Новый storeId для любого компонента
+  const currentStoreId = currentStore?.id || null
+
   useEffect(() => {
     const loadStores = async () => {
       if (!isOnline) return
@@ -159,7 +162,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadStores()
   }, [isOnline])
 
-  // Обработка онлайн/офлайн
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
@@ -171,7 +173,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Обновление времени
   useEffect(() => {
     const updateTime = () => {
       const now = new Date()
@@ -188,7 +189,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval)
   }, [])
 
-  // Обновление времени работы смены
   useEffect(() => {
     if (!currentShift) {
       setWorkingHours(0)
@@ -210,196 +210,184 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval)
   }, [currentShift])
 
-  // Автоматическая загрузка данных при авторизации и онлайн
   useEffect(() => {
     if (isAuthenticated && isOnline && currentUser) {
       loadData(currentUser)
     }
   }, [isAuthenticated, isOnline])
 
-  // Загрузка основных данных (пользователи, товары, продажи, визиты)
   const loadData = async (user: User | null) => {
-    
+    if (!isOnline) return
+    try {
+      const { data: storesData } = await supabase.from("stores").select("*")
+      if (storesData) setStores(storesData)
 
-  if (!isOnline) return
-  try {
-    const { data: storesData } = await supabase.from("stores").select("*")
-    if (storesData) setStores(storesData)
-
-    const { data: usersData } = await supabase.from("users").select("*")
-    if (usersData) {
-      const usersWithStores = usersData.map((userItem) => {
-        const store = storesData?.find((s) => s.id === userItem.store_id)
-        return { ...userItem, store }
-      })
-      setUsers(usersWithStores)
-    }
-
-    if (user) {
-  await loadProducts(user)
-}
-
-    const recalcTotalSalesAmount = (salesList: Sale[]) => {
-      const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
-      setTotalSalesAmount(total)
-    }
-
-    if (user) {
-      const { data: shiftData } = await supabase
-        .from("shifts")
-        .select("*")
-        .eq("user_id", user.id)
-        .is("end_time", null)
-        .maybeSingle()
-
-      setCurrentShift(shiftData || null)
-
-      if (!shiftData) {
-        setSales([])
-        setTotalSalesAmount(0)
-        return
+      const { data: usersData } = await supabase.from("users").select("*")
+      if (usersData) {
+        const usersWithStores = usersData.map((userItem) => {
+          const store = storesData?.find((s) => s.id === userItem.store_id)
+          return { ...userItem, store }
+        })
+        setUsers(usersWithStores)
       }
 
-      if (user.role === "owner") {
-        const { data: productsData } = await supabase.from("products").select("*")
-        const { data: salesData } = await supabase.from("sales").select("*")
-        const { data: visitsData } = await supabase.from("visits").select("*")
+      if (user) {
+        await loadProducts(user)
+      }
 
-        if (productsData) setProducts(productsData)
-        if (salesData) {
-          const salesWithSellers = salesData.map((sale) => {
-            const seller = usersData?.find((u) => u.id === sale.seller_id)
-            return { ...sale, seller }
-          })
-          setSales(salesWithSellers)
-          recalcTotalSalesAmount(salesWithSellers)
-        }
-        if (visitsData) {
-          const visitsWithSellers = visitsData.map((visit) => {
-            const seller = usersData?.find((u) => u.id === visit.seller_id)
-            return { ...visit, seller }
-          })
-          setVisits(visitsWithSellers)
-        }
-      } else if (user.store_id) {
-        const { data: productsData } = await supabase
-          .from("products")
+      const recalcTotalSalesAmount = (salesList: Sale[]) => {
+        const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
+        setTotalSalesAmount(total)
+      }
+
+      if (user) {
+        const { data: shiftData } = await supabase
+          .from("shifts")
           .select("*")
-          .eq("store_id", user.store_id)
-        const { data: salesData } = await supabase.from("sales").select("*").eq("store_id", user.store_id)
-        const { data: visitsData } = await supabase.from("visits").select("*").eq("store_id", user.store_id)
+          .eq("user_id", user.id)
+          .is("end_time", null)
+          .maybeSingle()
 
-        if (productsData) setProducts(productsData)
-        if (salesData) {
-          const salesWithSellers = salesData.map((sale) => {
-            const seller = usersData?.find((u) => u.id === sale.seller_id)
-            return { ...sale, seller }
-          })
-          setSales(salesWithSellers)
-          recalcTotalSalesAmount(salesWithSellers)
+        setCurrentShift(shiftData || null)
+
+        if (!shiftData) {
+          setSales([])
+          setTotalSalesAmount(0)
+          return
         }
-        if (visitsData) {
-          const visitsWithSellers = visitsData.map((visit) => {
-            const seller = usersData?.find((u) => u.id === visit.seller_id)
-            return { ...visit, seller }
-          })
-          setVisits(visitsWithSellers)
+
+        if (user.role === "owner") {
+          const { data: productsData } = await supabase.from("products").select("*")
+          const { data: salesData } = await supabase.from("sales").select("*")
+          const { data: visitsData } = await supabase.from("visits").select("*")
+
+          if (productsData) setProducts(productsData)
+          if (salesData) {
+            const salesWithSellers = salesData.map((sale) => {
+              const seller = usersData?.find((u) => u.id === sale.seller_id)
+              return { ...sale, seller }
+            })
+            setSales(salesWithSellers)
+            recalcTotalSalesAmount(salesWithSellers)
+          }
+          if (visitsData) {
+            const visitsWithSellers = visitsData.map((visit) => {
+              const seller = usersData?.find((u) => u.id === visit.seller_id)
+              return { ...visit, seller }
+            })
+            setVisits(visitsWithSellers)
+          }
+        } else if (user.store_id) {
+          const { data: productsData } = await supabase
+            .from("products")
+            .select("*")
+            .eq("store_id", user.store_id)
+          const { data: salesData } = await supabase.from("sales").select("*").eq("store_id", user.store_id)
+          const { data: visitsData } = await supabase.from("visits").select("*").eq("store_id", user.store_id)
+
+          if (productsData) setProducts(productsData)
+          if (salesData) {
+            const salesWithSellers = salesData.map((sale) => {
+              const seller = usersData?.find((u) => u.id === sale.seller_id)
+              return { ...sale, seller }
+            })
+            setSales(salesWithSellers)
+            recalcTotalSalesAmount(salesWithSellers)
+          }
+          if (visitsData) {
+            const visitsWithSellers = visitsData.map((visit) => {
+              const seller = usersData?.find((u) => u.id === visit.seller_id)
+              return { ...visit, seller }
+            })
+            setVisits(visitsWithSellers)
+          }
         }
       }
+    } catch (error) {
+      console.error("Error loading data:", error)
     }
-  } catch (error) {
-    console.error("Error loading data:", error)
   }
-}
 
-
-
-
-const loadProducts = async (user: User) => {
-  if (!isOnline || !user) return
-  try {
-    let data, error
-    if (user.role === "owner") {
-      const res = await supabase.from("products").select("*")
-      data = res.data
-      error = res.error
-    } else if (user.store_id) {
-      const res = await supabase.from("products").select("*").eq("store_id", user.store_id)
-      data = res.data
-      error = res.error
+  const loadProducts = async (user: User) => {
+    if (!isOnline || !user) return
+    try {
+      let data, error
+      if (user.role === "owner") {
+        const res = await supabase.from("products").select("*")
+        data = res.data
+        error = res.error
+      } else if (user.store_id) {
+        const res = await supabase.from("products").select("*").eq("store_id", user.store_id)
+        data = res.data
+        error = res.error
+      }
+      if (error) throw error
+      if (data) setProducts(data)
+    } catch (error) {
+      console.error("Error loading products:", error)
     }
-    if (error) throw error
-    if (data) setProducts(data)
-  } catch (error) {
-    console.error("Error loading products:", error)
   }
-}
-
 
   const login = async (
-  login: string,
-  password: string,
-  selectedStoreId: string
-): Promise<boolean> => {
-  if (!isOnline) return false
+    login: string,
+    password: string,
+    selectedStoreId: string
+  ): Promise<boolean> => {
+    if (!isOnline) return false
 
-  const hashedPassword = hashPassword(password)
-  const cleanLogin = login.trim().toLowerCase()
+    const hashedPassword = hashPassword(password)
+    const cleanLogin = login.trim().toLowerCase()
 
-  try {
-    const { data: userData, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("login", cleanLogin)
-      .maybeSingle()
-
-    if (error || !userData) {
-      console.error("Login error or user not found:", error)
-      return false
-    }
-
-    if (userData.password_hash !== hashedPassword) {
-      console.error("Invalid password")
-      return false
-    }
-
-    // 💥 Завжди підвантажуємо магазин
-    let storeData: Store | null = null
-    if (selectedStoreId) {
-      const { data: store, error: storeError } = await supabase
-        .from("stores")
+    try {
+      const { data: userData, error } = await supabase
+        .from("users")
         .select("*")
-        .eq("id", selectedStoreId)
+        .eq("login", cleanLogin)
         .maybeSingle()
 
-      if (storeError) {
-        console.error("Error loading selected store:", storeError)
+      if (error || !userData) {
+        console.error("Login error or user not found:", error)
         return false
       }
 
-      storeData = store
+      if (userData.password_hash !== hashedPassword) {
+        console.error("Invalid password")
+        return false
+      }
+
+      let storeData: Store | null = null
+      if (selectedStoreId) {
+        const { data: store, error: storeError } = await supabase
+          .from("stores")
+          .select("*")
+          .eq("id", selectedStoreId)
+          .maybeSingle()
+
+        if (storeError) {
+          console.error("Error loading selected store:", storeError)
+          return false
+        }
+
+        storeData = store
+      }
+
+      const userWithStore: User = {
+        ...userData,
+        store: storeData || undefined,
+      }
+
+      setCurrentUser(userWithStore)
+      setCurrentStore(storeData)
+      setIsAuthenticated(true)
+
+      await loadData(userWithStore)
+
+      return true
+    } catch (error) {
+      console.error("Login failed:", error)
+      return false
     }
-
-    const userWithStore: User = {
-      ...userData,
-      store: storeData || undefined,
-    }
-
-    // 💾 Ставимо користувача та магазин
-    setCurrentUser(userWithStore)
-    setCurrentStore(storeData)
-    setIsAuthenticated(true)
-
-    // 🧠 Завантажуємо все інше вже з нормальним контекстом
-    await loadData(userWithStore)
-
-    return true
-  } catch (error) {
-    console.error("Login failed:", error)
-    return false
   }
-}
-
 
   const logout = () => {
     setCurrentUser(null)
@@ -449,8 +437,6 @@ const loadProducts = async (user: User) => {
         console.error("Insert user error:", insertError)
         return false
       }
-
-      
 
       await loadData(currentUser)
       return true
@@ -508,7 +494,6 @@ const loadProducts = async (user: User) => {
         return
       }
 
-      // Очистка визитов после закрытия смены (по бизнес-логике)
       await supabase
         .from("visits")
         .delete()
@@ -530,17 +515,22 @@ const loadProducts = async (user: User) => {
       const { store_id, ...rest } = product
 
       const actualStoreId = store_id || currentUser.store_id || null
+if (!actualStoreId) {
+  console.error("store_id is required to add a product")
+  return
+}
+console.log("Adding product with:", { ...rest, store_id: actualStoreId })
 
-      const { data, error } = await supabase
-        .from("products")
-        .insert([{ ...rest, store_id: actualStoreId }])
-        .select()
-        .maybeSingle()
+const { data, error } = await supabase
+  .from("products")
+  .insert([{ ...rest, store_id: actualStoreId }])
+  .select()
+  .maybeSingle()
 
-      if (error) {
-        console.error("Error adding product:", error)
-        return
-      }
+if (error) {
+  console.error("Error adding product:", error)
+  return
+}
 
       if (data) {
         setProducts((prev) => [...prev, data])
@@ -554,20 +544,17 @@ const loadProducts = async (user: User) => {
     if (!isOnline) return
 
     const cleanProductEntries = Object.entries(product).filter(([key, value]) => {
-  if (value === undefined) return false;
-  if (key.endsWith("_id") && (value === "" || value === null)) return false; // убираем пустые UUID
-  if (value === "") return false; // убираем все пустые строки, если не нужны
-  return true;
-});
-const cleanProduct = Object.fromEntries(cleanProductEntries);
-
+      if (value === undefined) return false
+      if (key.endsWith("_id") && (value === "" || value === null)) return false
+      if (value === "") return false
+      return true
+    })
+    const cleanProduct = Object.fromEntries(cleanProductEntries)
 
     if (!id || Object.keys(cleanProduct).length === 0) {
       console.warn("updateProduct skipped: invalid id or empty product")
       return
     }
-
-    console.log("Updating product:", { id, cleanProduct })
 
     try {
       const { data, error } = await supabase
@@ -577,11 +564,10 @@ const cleanProduct = Object.fromEntries(cleanProductEntries);
         .select()
         .maybeSingle()
 
-if (error) {
-  console.error("Error updating product (full error):", JSON.stringify(error, null, 2));
-  return;
-}
-
+      if (error) {
+        console.error("Error updating product (full error):", JSON.stringify(error, null, 2))
+        return
+      }
 
       if (data) {
         setProducts((prev) => prev.map((p) => (p.id === id ? data : p)))
@@ -590,7 +576,6 @@ if (error) {
       console.error("updateProduct failed:", error)
     }
   }
-
 
   const deleteProduct = async (id: string): Promise<void> => {
     if (!isOnline) return
@@ -610,123 +595,114 @@ if (error) {
   }
 
   const addSale = async (sale: Omit<Sale, "id" | "store_id" | "created_at">) => {
-  if (!isOnline || !currentUser) {
-    console.error("Offline or no user, cannot add sale")
-    return
-  }
-
-  try {
-    const store_id = currentStore?.id || null
-
-    // Считаем количество визитов, чтобы номер сделать
-    const { count: visitsCount, error: countError } = await supabase
-      .from("visits")
-      .select("id", { count: "exact", head: true })
-      .eq("store_id", store_id)
-
-    if (countError) {
-      console.error("Error counting visits:", countError)
-    }
-
-    const visitNumber = (visitsCount ?? 0) + 1
-
-    // Добавляем продажу
-    const { data, error } = await supabase
-      .from("sales")
-      .insert([
-        {
-          store_id,
-          seller_id: currentUser.id,
-          receipt_number: sale.receipt_number,
-          total_amount: sale.total_amount,
-          payment_method: sale.payment_method,
-          items_data: sale.items_data,
-        },
-      ])
-      .select()
-      .maybeSingle()
-
-    if (error) {
-      console.error("Error adding sale:", error)
+    if (!isOnline || !currentUser) {
+      console.error("Offline or no user, cannot add sale")
       return
     }
 
-    if (data) {
-      setSales((prev) => {
-        const updatedSales = [...prev, { ...data, seller: currentUser }]
-        const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
-        setTotalSalesAmount(total)
-        return updatedSales
-      })
+    try {
+      const store_id = currentStore?.id || null
 
-      // Обновляем количество товара
-      for (const item of sale.items_data) {
-        const productId = item.product_id
-        const soldQty = item.quantity
+      const { count: visitsCount, error: countError } = await supabase
+        .from("visits")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", store_id)
 
-        if (!productId || !soldQty) continue
-
-        const existingProduct = products.find((p) => p.id === productId)
-        if (!existingProduct) continue
-
-        const newQty = Math.max(0, existingProduct.quantity - soldQty)
-
-        const { data: updatedProduct, error: updateError } = await supabase
-          .from("products")
-          .update({ quantity: newQty })
-          .eq("id", productId)
-          .select()
-          .maybeSingle()
-
-        if (updateError) {
-          console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
-        }
-
-        setProducts((prev) =>
-          prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p))
-        )
+      if (countError) {
+        console.error("Error counting visits:", countError)
       }
-    }
 
-    // Добавляем визит
-    if (visitNumber) {
-      const { error: visitInsertError } = await supabase.from("visits").insert([
-        {
-          store_id,
-          seller_id: currentUser.id,
-          title: `Візит №${visitNumber}`,
-          sale_amount: sale.total_amount,
-        },
-      ])
+      const visitNumber = (visitsCount ?? 0) + 1
 
-      if (visitInsertError) {
-        console.error("Error adding visit:", visitInsertError)
-      } else {
-        setVisits((prev) => [
-          ...prev,
+      const { data, error } = await supabase
+        .from("sales")
+        .insert([
           {
-            id: `visit-${Date.now()}`,
-            store_id: store_id || "",
+            store_id,
+            seller_id: currentUser.id,
+            receipt_number: sale.receipt_number,
+            total_amount: sale.total_amount,
+            payment_method: sale.payment_method,
+            items_data: sale.items_data,
+          },
+        ])
+        .select()
+        .maybeSingle()
+
+      if (error) {
+        console.error("Error adding sale:", error)
+        return
+      }
+
+      if (data) {
+        setSales((prev) => {
+          const updatedSales = [...prev, { ...data, seller: currentUser }]
+          const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
+          setTotalSalesAmount(total)
+          return updatedSales
+        })
+
+        for (const item of sale.items_data) {
+          const productId = item.product_id
+          const soldQty = item.quantity
+
+          if (!productId || !soldQty) continue
+
+          const existingProduct = products.find((p) => p.id === productId)
+          if (!existingProduct) continue
+
+          const newQty = Math.max(0, existingProduct.quantity - soldQty)
+
+          const { data: updatedProduct, error: updateError } = await supabase
+            .from("products")
+            .update({ quantity: newQty })
+            .eq("id", productId)
+            .select()
+            .maybeSingle()
+
+          if (updateError) {
+            console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
+          }
+
+          setProducts((prev) =>
+            prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p))
+          )
+        }
+      }
+
+      if (visitNumber) {
+        const { error: visitInsertError } = await supabase.from("visits").insert([
+          {
+            store_id,
             seller_id: currentUser.id,
             title: `Візит №${visitNumber}`,
             sale_amount: sale.total_amount,
-            created_at: new Date().toISOString(),
-            seller: currentUser,
           },
         ])
+
+        if (visitInsertError) {
+          console.error("Error adding visit:", visitInsertError)
+        } else {
+          setVisits((prev) => [
+            ...prev,
+            {
+              id: `visit-${Date.now()}`,
+              store_id: store_id || "",
+              seller_id: currentUser.id,
+              title: `Візит №${visitNumber}`,
+              sale_amount: sale.total_amount,
+              created_at: new Date().toISOString(),
+              seller: currentUser,
+            },
+          ])
+        }
       }
+    } catch (error) {
+      console.error("addSale failed:", error)
     }
-  } catch (error) {
-    console.error("addSale failed:", error)
   }
-}
-
-
-
-  // Доп. методы статистики
 
   const getDailySalesStats = () => {
-    // Пример подсчёта по дням
     const statsMap: Record<string, number> = {}
 
     sales.forEach((sale) => {
@@ -807,6 +783,7 @@ if (error) {
         workingMinutes,
         currentUser,
         currentStore,
+        currentStoreId, // <-- тут!
         isAuthenticated,
         isOnline,
         addSale,

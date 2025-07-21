@@ -19,6 +19,7 @@ export interface Sale {
   receiptNumber: string
   payment_method: "cash" | "terminal"
   discount?: number
+  store_id: string | null
 }
 
 // Тип для створення нового продажу (без id і дати)
@@ -36,4 +37,6 @@ export interface SaleInput {
   }[]
   payment_method: "cash" | "terminal"
   seller_id?: string
+  store_id: string | null
 }
+

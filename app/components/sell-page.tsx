@@ -34,36 +34,38 @@ const SellPage = ({ onBack }: SellPageProps) => {
   const [cart, setCart] = useState<CartItem[]>([])
   const [showReceipt, setShowReceipt] = useState(false)
   const [currentSale, setCurrentSale] = useState<Sale | null>(null)
-  const { addSale, products } = useApp()
+  const { addSale, products, currentStoreId } = useApp()
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "terminal">("cash")
   const [discountInput, setDiscountInput] = useState("")
   const discount = parseFloat(discountInput) || 0
 
+  // Фильтрация по магазину!
   const filteredProducts = products
     .filter(
       (product) =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.model.toLowerCase().includes(searchTerm.toLowerCase()),
+        product.store_id === currentStoreId &&
+        (
+          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.model.toLowerCase().includes(searchTerm.toLowerCase())
+        )
     )
     .filter((product) => product.quantity > 0)
 
   const addToCart = (product: Omit<CartItem, "cartQuantity">) => {
-  const existingItem = cart.find((item) => item.id === product.id)
-  if (existingItem) {
-    if (existingItem.cartQuantity < product.quantity) {
-      setCart(
-        cart.map((item) =>
-          item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item,
-        ),
-      )
+    const existingItem = cart.find((item) => item.id === product.id)
+    if (existingItem) {
+      if (existingItem.cartQuantity < product.quantity) {
+        setCart(
+          cart.map((item) =>
+            item.id === product.id ? { ...item, cartQuantity: item.cartQuantity + 1 } : item,
+          ),
+        )
+      }
+    } else {
+      setCart([...cart, { ...product, cartQuantity: 1 }])
     }
-  } else {
-    setCart([...cart, { ...product, cartQuantity: 1 }])
   }
-}
-
-
 
   const updateCartQuantity = (productId: string, newQuantity: number) => {
     if (newQuantity === 0) {
@@ -109,6 +111,7 @@ const SellPage = ({ onBack }: SellPageProps) => {
       })),
       payment_method: paymentMethod,
       seller_id: undefined,
+      store_id: currentStoreId, // Сохраняем магазин продажи
     }
 
     addSale(saleInput)
@@ -121,6 +124,7 @@ const SellPage = ({ onBack }: SellPageProps) => {
       receiptNumber: receiptNumber,
       payment_method: paymentMethod,
       discount,
+      store_id: currentStoreId,
     }
 
     setCurrentSale(sale)
@@ -142,6 +146,7 @@ const SellPage = ({ onBack }: SellPageProps) => {
       .from("products")
       .select("*")
       .eq("barcode", input)
+      .eq("store_id", currentStoreId) // Важно: ищем товар только в текущем магазине!
       .limit(1)
       .single()
 
