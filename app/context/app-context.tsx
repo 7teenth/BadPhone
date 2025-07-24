@@ -1,6 +1,7 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from "react"
+import type React from "react"
+import { createContext, useContext, useState, useEffect } from "react"
 import { supabase } from "../../lib/supabase"
 import { hashPassword } from "@/lib/hash"
 
@@ -91,7 +92,9 @@ interface AppState {
 
 interface AppContextType extends AppState {
   addSale: (sale: Omit<Sale, "id" | "store_id" | "created_at">) => Promise<void>
-  addProduct: (product: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id?: string | null }) => Promise<void>
+  addProduct: (
+    product: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id?: string | null },
+  ) => Promise<void>
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
   startShift: () => Promise<void>
@@ -121,7 +124,7 @@ interface AppContextType extends AppState {
     totalItems: number
     avgCheck: number
   } | null
-  currentStoreId: string | null // <-- вот это добавлено!
+  currentStoreId: string | null
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -142,7 +145,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
 
-  // Новый storeId для любого компонента
   const currentStoreId = currentStore?.id || null
 
   useEffect(() => {
@@ -216,9 +218,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isOnline])
 
+  // ✅ ИСПРАВЛЕННАЯ функция loadData
   const loadData = async (user: User | null) => {
     if (!isOnline) return
+
     try {
+      console.log("🔄 Loading data for user:", user?.name, "role:", user?.role)
+
+      // Загружаем базовые данные
       const { data: storesData } = await supabase.from("stores").select("*")
       if (storesData) setStores(storesData)
 
@@ -235,12 +242,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await loadProducts(user)
       }
 
+      // Функция для пересчета общей суммы продаж
       const recalcTotalSalesAmount = (salesList: Sale[]) => {
         const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
         setTotalSalesAmount(total)
       }
 
       if (user) {
+        // Загружаем текущую смену
         const { data: shiftData } = await supabase
           .from("shifts")
           .select("*")
@@ -250,18 +259,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         setCurrentShift(shiftData || null)
 
-        if (!shiftData) {
-          setSales([])
-          setTotalSalesAmount(0)
-          return
-        }
-
+        // ✅ ИСПРАВЛЕНИЕ: Загружаем ВСЕ исторические данные независимо от смены
         if (user.role === "owner") {
-          const { data: productsData } = await supabase.from("products").select("*")
-          const { data: salesData } = await supabase.from("sales").select("*")
-          const { data: visitsData } = await supabase.from("visits").select("*")
+          console.log("📊 Loading ALL data for owner")
 
-          if (productsData) setProducts(productsData)
+          // Загружаем ВСЕ продажи для owner'а
+          const { data: salesData } = await supabase.from("sales").select("*").order("created_at", { ascending: false })
+
+          console.log("📈 All sales data loaded:", salesData?.length || 0, "sales")
+
+          const { data: visitsData } = await supabase
+            .from("visits")
+            .select("*")
+            .order("created_at", { ascending: false })
+
           if (salesData) {
             const salesWithSellers = salesData.map((sale) => {
               const seller = usersData?.find((u) => u.id === sale.seller_id)
@@ -269,7 +280,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             })
             setSales(salesWithSellers)
             recalcTotalSalesAmount(salesWithSellers)
+            console.log(
+              "✅ Sales set:",
+              salesWithSellers.length,
+              "total amount:",
+              salesWithSellers.reduce((sum, s) => sum + s.total_amount, 0),
+            )
           }
+
           if (visitsData) {
             const visitsWithSellers = visitsData.map((visit) => {
               const seller = usersData?.find((u) => u.id === visit.seller_id)
@@ -278,14 +296,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setVisits(visitsWithSellers)
           }
         } else if (user.store_id) {
-          const { data: productsData } = await supabase
-            .from("products")
+          console.log("🏪 Loading store data for seller, store_id:", user.store_id)
+
+          // Загружаем ВСЕ продажи магазина для seller'а
+          const { data: salesData } = await supabase
+            .from("sales")
             .select("*")
             .eq("store_id", user.store_id)
-          const { data: salesData } = await supabase.from("sales").select("*").eq("store_id", user.store_id)
-          const { data: visitsData } = await supabase.from("visits").select("*").eq("store_id", user.store_id)
+            .order("created_at", { ascending: false })
 
-          if (productsData) setProducts(productsData)
+          const { data: visitsData } = await supabase
+            .from("visits")
+            .select("*")
+            .eq("store_id", user.store_id)
+            .order("created_at", { ascending: false })
+
           if (salesData) {
             const salesWithSellers = salesData.map((sale) => {
               const seller = usersData?.find((u) => u.id === sale.seller_id)
@@ -294,6 +319,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setSales(salesWithSellers)
             recalcTotalSalesAmount(salesWithSellers)
           }
+
           if (visitsData) {
             const visitsWithSellers = visitsData.map((visit) => {
               const seller = usersData?.find((u) => u.id === visit.seller_id)
@@ -304,7 +330,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (error) {
-      console.error("Error loading data:", error)
+      console.error("❌ Error loading data:", error)
     }
   }
 
@@ -328,33 +354,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const login = async (
-    login: string,
-    password: string,
-    selectedStoreId: string
-  ): Promise<boolean> => {
+  const login = async (login: string, password: string, selectedStoreId: string): Promise<boolean> => {
     if (!isOnline) return false
-
     const hashedPassword = hashPassword(password)
     const cleanLogin = login.trim().toLowerCase()
-
     try {
-      const { data: userData, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("login", cleanLogin)
-        .maybeSingle()
-
+      const { data: userData, error } = await supabase.from("users").select("*").eq("login", cleanLogin).maybeSingle()
       if (error || !userData) {
         console.error("Login error or user not found:", error)
         return false
       }
-
       if (userData.password_hash !== hashedPassword) {
         console.error("Invalid password")
         return false
       }
-
       let storeData: Store | null = null
       if (selectedStoreId) {
         const { data: store, error: storeError } = await supabase
@@ -362,26 +375,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .select("*")
           .eq("id", selectedStoreId)
           .maybeSingle()
-
         if (storeError) {
           console.error("Error loading selected store:", storeError)
           return false
         }
-
         storeData = store
       }
-
       const userWithStore: User = {
         ...userData,
         store: storeData || undefined,
       }
-
       setCurrentUser(userWithStore)
       setCurrentStore(storeData)
       setIsAuthenticated(true)
-
       await loadData(userWithStore)
-
       return true
     } catch (error) {
       console.error("Login failed:", error)
@@ -409,22 +416,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     storeId: string | null,
   ): Promise<boolean> => {
     if (!isOnline) return false
-
     const hashedPassword = hashPassword(password)
     const store_id_to_insert = typeof storeId === "string" && storeId.trim() !== "" ? storeId : null
-
     try {
-      const { data: existingUser } = await supabase
-        .from("users")
-        .select("id")
-        .eq("login", login)
-        .maybeSingle()
-
+      const { data: existingUser } = await supabase.from("users").select("id").eq("login", login).maybeSingle()
       if (existingUser) {
         console.error("User already exists")
         return false
       }
-
       const { error: insertError } = await supabase.from("users").insert({
         login,
         password_hash: hashedPassword,
@@ -432,12 +431,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         role: "seller",
         store_id: store_id_to_insert,
       })
-
       if (insertError) {
         console.error("Insert user error:", insertError)
         return false
       }
-
       await loadData(currentUser)
       return true
     } catch (error) {
@@ -448,13 +445,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const startShift = async () => {
     if (!isOnline || !currentUser || currentShift) return
-
     try {
-      await supabase
-        .from("visits")
-        .delete()
-        .eq("store_id", currentStore?.id)
-
+      await supabase.from("visits").delete().eq("store_id", currentStore?.id)
       const now = new Date().toISOString()
       const { data, error } = await supabase
         .from("shifts")
@@ -466,12 +458,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
         .select()
         .maybeSingle()
-
       if (error) {
         console.error("Error starting shift:", error)
         return
       }
-
       setCurrentShift(data || null)
     } catch (err) {
       console.error("Failed to start shift:", err)
@@ -480,25 +470,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const endShift = async () => {
     if (!isOnline || !currentShift) return
-
     try {
       const now = new Date().toISOString()
-
-      const { error } = await supabase
-        .from("shifts")
-        .update({ end_time: now })
-        .eq("id", currentShift.id)
-
+      const { error } = await supabase.from("shifts").update({ end_time: now }).eq("id", currentShift.id)
       if (error) {
         console.error("Error ending shift:", error)
         return
       }
-
-      await supabase
-        .from("visits")
-        .delete()
-        .eq("store_id", currentStore?.id)
-
+      await supabase.from("visits").delete().eq("store_id", currentStore?.id)
       setCurrentShift({ ...currentShift, end_time: now })
       setTotalSalesAmount(0)
     } catch (err) {
@@ -510,28 +489,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     product: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id: string | null },
   ): Promise<void> => {
     if (!isOnline || !currentUser) return
-
     try {
       const { store_id, ...rest } = product
-
       const actualStoreId = store_id || currentUser.store_id || null
-if (!actualStoreId) {
-  console.error("store_id is required to add a product")
-  return
-}
-console.log("Adding product with:", { ...rest, store_id: actualStoreId })
-
-const { data, error } = await supabase
-  .from("products")
-  .insert([{ ...rest, store_id: actualStoreId }])
-  .select()
-  .maybeSingle()
-
-if (error) {
-  console.error("Error adding product:", error)
-  return
-}
-
+      if (!actualStoreId) {
+        console.error("store_id is required to add a product")
+        return
+      }
+      console.log("Adding product with:", { ...rest, store_id: actualStoreId })
+      const { data, error } = await supabase
+        .from("products")
+        .insert([{ ...rest, store_id: actualStoreId }])
+        .select()
+        .maybeSingle()
+      if (error) {
+        console.error("Error adding product:", error)
+        return
+      }
       if (data) {
         setProducts((prev) => [...prev, data])
       }
@@ -542,7 +516,6 @@ if (error) {
 
   const updateProduct = async (id: string, product: Partial<Product>): Promise<void> => {
     if (!isOnline) return
-
     const cleanProductEntries = Object.entries(product).filter(([key, value]) => {
       if (value === undefined) return false
       if (key.endsWith("_id") && (value === "" || value === null)) return false
@@ -550,25 +523,16 @@ if (error) {
       return true
     })
     const cleanProduct = Object.fromEntries(cleanProductEntries)
-
     if (!id || Object.keys(cleanProduct).length === 0) {
       console.warn("updateProduct skipped: invalid id or empty product")
       return
     }
-
     try {
-      const { data, error } = await supabase
-        .from("products")
-        .update(cleanProduct)
-        .eq("id", id)
-        .select()
-        .maybeSingle()
-
+      const { data, error } = await supabase.from("products").update(cleanProduct).eq("id", id).select().maybeSingle()
       if (error) {
         console.error("Error updating product (full error):", JSON.stringify(error, null, 2))
         return
       }
-
       if (data) {
         setProducts((prev) => prev.map((p) => (p.id === id ? data : p)))
       }
@@ -579,15 +543,12 @@ if (error) {
 
   const deleteProduct = async (id: string): Promise<void> => {
     if (!isOnline) return
-
     try {
       const { error } = await supabase.from("products").delete().eq("id", id)
-
       if (error) {
         console.error("Error deleting product:", error)
         return
       }
-
       setProducts((prev) => prev.filter((p) => p.id !== id))
     } catch (error) {
       console.error("deleteProduct failed:", error)
@@ -599,21 +560,16 @@ if (error) {
       console.error("Offline or no user, cannot add sale")
       return
     }
-
     try {
       const store_id = currentStore?.id || null
-
       const { count: visitsCount, error: countError } = await supabase
         .from("visits")
         .select("id", { count: "exact", head: true })
         .eq("store_id", store_id)
-
       if (countError) {
         console.error("Error counting visits:", countError)
       }
-
       const visitNumber = (visitsCount ?? 0) + 1
-
       const { data, error } = await supabase
         .from("sales")
         .insert([
@@ -628,12 +584,10 @@ if (error) {
         ])
         .select()
         .maybeSingle()
-
       if (error) {
         console.error("Error adding sale:", error)
         return
       }
-
       if (data) {
         setSales((prev) => {
           const updatedSales = [...prev, { ...data, seller: currentUser }]
@@ -641,35 +595,25 @@ if (error) {
           setTotalSalesAmount(total)
           return updatedSales
         })
-
         for (const item of sale.items_data) {
           const productId = item.product_id
           const soldQty = item.quantity
-
           if (!productId || !soldQty) continue
-
           const existingProduct = products.find((p) => p.id === productId)
           if (!existingProduct) continue
-
           const newQty = Math.max(0, existingProduct.quantity - soldQty)
-
           const { data: updatedProduct, error: updateError } = await supabase
             .from("products")
             .update({ quantity: newQty })
             .eq("id", productId)
             .select()
             .maybeSingle()
-
           if (updateError) {
             console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
           }
-
-          setProducts((prev) =>
-            prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p))
-          )
+          setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p)))
         }
       }
-
       if (visitNumber) {
         const { error: visitInsertError } = await supabase.from("visits").insert([
           {
@@ -679,7 +623,6 @@ if (error) {
             sale_amount: sale.total_amount,
           },
         ])
-
         if (visitInsertError) {
           console.error("Error adding visit:", visitInsertError)
         } else {
@@ -702,33 +645,124 @@ if (error) {
     }
   }
 
+  // ✅ УЛУЧШЕННЫЕ функции для админки с логированием
   const getDailySalesStats = () => {
-    const statsMap: Record<string, number> = {}
+    console.log("📊 getDailySalesStats called, sales count:", sales.length)
+
+    if (!sales || sales.length === 0) {
+      console.log("❌ No sales data available")
+      return []
+    }
+
+    const statsMap: Record<
+      string,
+      {
+        salesCount: number
+        totalAmount: number
+        sellers: { [sellerId: string]: { name: string; amount: number; salesCount: number } }
+      }
+    > = {}
 
     sales.forEach((sale) => {
-      const date = new Date(sale.created_at).toLocaleDateString("uk-UA")
-      statsMap[date] = (statsMap[date] || 0) + sale.total_amount
+      // ✅ ИСПРАВЛЕНИЕ: Правильное форматирование даты
+      const date = new Date(sale.created_at).toISOString().split("T")[0] // Получаем YYYY-MM-DD
+      if (!statsMap[date]) {
+        statsMap[date] = { salesCount: 0, totalAmount: 0, sellers: {} }
+      }
+      statsMap[date].salesCount += 1
+      statsMap[date].totalAmount += sale.total_amount
+
+      if (sale.seller) {
+        const sellerId = sale.seller.id
+        if (!statsMap[date].sellers[sellerId]) {
+          statsMap[date].sellers[sellerId] = {
+            name: sale.seller.name,
+            amount: 0,
+            salesCount: 0,
+          }
+        }
+        statsMap[date].sellers[sellerId].amount += sale.total_amount
+        statsMap[date].sellers[sellerId].salesCount += 1
+      }
     })
 
-    return Object.entries(statsMap).map(([date, amount]) => ({ date, amount }))
+    const result = Object.entries(statsMap)
+      .map(([date, stats]) => ({
+        date,
+        salesCount: stats.salesCount,
+        totalAmount: stats.totalAmount,
+        sellers: stats.sellers,
+      }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Сортируем по дате (новые сверху)
+
+    console.log("✅ Daily stats result:", result)
+    return result
   }
 
   const getTotalStats = () => {
-    const totalAmount = sales.reduce((sum, sale) => sum + sale.total_amount, 0)
-    return { totalAmount, salesCount: sales.length }
+    console.log("📈 getTotalStats called, sales count:", sales.length)
+
+    if (!sales || sales.length === 0) {
+      console.log("❌ No sales data for total stats")
+      return {
+        totalRevenue: 0,
+        totalSales: 0,
+        averageSale: 0,
+        topSellingAmount: 0,
+        topSellingDay: "",
+        cashAmount: 0,
+        terminalAmount: 0,
+      }
+    }
+
+    const totalRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0)
+    const totalSales = sales.length
+    const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0
+
+    // Найти самый прибыльный день
+    const dateStats: Record<string, number> = {}
+    sales.forEach((sale) => {
+      const date = new Date(sale.created_at).toISOString().split("T")[0]
+      dateStats[date] = (dateStats[date] || 0) + sale.total_amount
+    })
+
+    let topSellingAmount = 0
+    let topSellingDay = ""
+    Object.entries(dateStats).forEach(([date, amount]) => {
+      if (amount > topSellingAmount) {
+        topSellingAmount = amount
+        topSellingDay = date
+      }
+    })
+
+    // Суммы по типу оплаты
+    const cashAmount = sales.filter((s) => s.payment_method === "cash").reduce((sum, s) => sum + s.total_amount, 0)
+    const terminalAmount = sales
+      .filter((s) => s.payment_method === "terminal")
+      .reduce((sum, s) => sum + s.total_amount, 0)
+
+    const result = {
+      totalRevenue,
+      totalSales,
+      averageSale,
+      topSellingAmount,
+      topSellingDay,
+      cashAmount,
+      terminalAmount,
+    }
+
+    console.log("✅ Total stats result:", result)
+    return result
   }
 
   const getShiftStats = () => {
     if (!currentShift) return null
-
     const start = new Date(currentShift.start_time)
     const end = currentShift.end_time ? new Date(currentShift.end_time) : new Date()
-
     const salesDuringShift = sales.filter((s) => {
       const created = new Date(s.created_at)
       return created >= start && created <= end
     })
-
     const totalAmount = salesDuringShift.reduce((sum, s) => sum + s.total_amount, 0)
     const cashAmount = salesDuringShift
       .filter((s) => s.payment_method === "cash")
@@ -739,7 +773,6 @@ if (error) {
     const count = salesDuringShift.length
     const totalItems = salesDuringShift.reduce((sum, s) => sum + s.items_data.length, 0)
     const avgCheck = count > 0 ? totalAmount / count : 0
-
     return { start, end, totalAmount, cashAmount, terminalAmount, count, totalItems, avgCheck }
   }
 
@@ -783,7 +816,7 @@ if (error) {
         workingMinutes,
         currentUser,
         currentStore,
-        currentStoreId, // <-- тут!
+        currentStoreId,
         isAuthenticated,
         isOnline,
         addSale,
@@ -792,49 +825,15 @@ if (error) {
         deleteProduct,
         startShift,
         endShift,
-        isShiftActive: Boolean(currentShift && !currentShift.end_time),
-        getHourlyEarnings: () => {
-          if (!currentShift) return 0
-          const totalMinutes = workingHours * 60 + workingMinutes
-          if (totalMinutes === 0) return 0
-          return totalSalesAmount / (totalMinutes / 60)
-        },
+        isShiftActive,
+        getHourlyEarnings,
         login,
         logout,
         register,
         deleteUser,
-        getDailySalesStats: () => {
-          const statsMap: Record<string, number> = {}
-          sales.forEach((sale) => {
-            const date = new Date(sale.created_at).toLocaleDateString("uk-UA")
-            statsMap[date] = (statsMap[date] || 0) + sale.total_amount
-          })
-          return Object.entries(statsMap).map(([date, amount]) => ({ date, amount }))
-        },
-        getTotalStats: () => {
-          const totalAmount = sales.reduce((sum, sale) => sum + sale.total_amount, 0)
-          return { totalAmount, salesCount: sales.length }
-        },
-        getShiftStats: () => {
-          if (!currentShift) return null
-          const start = new Date(currentShift.start_time)
-          const end = currentShift.end_time ? new Date(currentShift.end_time) : new Date()
-          const salesDuringShift = sales.filter((s) => {
-            const created = new Date(s.created_at)
-            return created >= start && created <= end
-          })
-          const totalAmount = salesDuringShift.reduce((sum, s) => sum + s.total_amount, 0)
-          const cashAmount = salesDuringShift
-            .filter((s) => s.payment_method === "cash")
-            .reduce((sum, s) => sum + s.total_amount, 0)
-          const terminalAmount = salesDuringShift
-            .filter((s) => s.payment_method === "terminal")
-            .reduce((sum, s) => sum + s.total_amount, 0)
-          const count = salesDuringShift.length
-          const totalItems = salesDuringShift.reduce((sum, s) => sum + s.items_data.length, 0)
-          const avgCheck = count > 0 ? totalAmount / count : 0
-          return { start, end, totalAmount, cashAmount, terminalAmount, count, totalItems, avgCheck }
-        },
+        getDailySalesStats,
+        getTotalStats,
+        getShiftStats,
         loadData,
       }}
     >

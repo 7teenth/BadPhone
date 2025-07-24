@@ -1,14 +1,15 @@
 {
-  "name": "BadPhone",
+  "name": "bad-phone",
   "version": "0.1.0",
-  "description": "PWA для продаж смартфонов",
+  "description": "PWA для продажів",
   "author": "Nikita Karvatskyi",
   "private": true,
   "scripts": {
-    "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
+    "build:web": "next build",
     "start": "electron .",
+    "build:all": "npm run build:web && electron-builder",
     "dist": "electron-builder"
   },
   "dependencies": {
@@ -67,24 +68,40 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "electron": "^26.2.0",
-    "electron-builder": "^24.6.0",
+    "electron": "^26.6.10",
+    "electron-builder": "^24.13.3",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
   },
-"main": "main.js",
-
+  "main": "main.js",
   "build": {
     "appId": "com.yourdomain.badphone",
     "productName": "BadPhone",
     "files": [
-      "out/**/*",
+      ".next/**/*",
+      "public/**/*",
       "main.js",
-      "package.json"
+      "package.json",
+      "next.config.mjs"
     ],
     "win": {
-      "target": "nsis"
-    }
+      "target": "nsis",
+      "icon": "public/favicon.ico"
+    },
+    "nsis": {
+  "oneClick": false,
+  "allowToChangeInstallationDirectory": true,
+  "createDesktopShortcut": true,
+  "createStartMenuShortcut": true,
+  "shortcutName": "BadPhone",
+  "installerIcon": "public/favicon.ico",
+  "uninstallerIcon": "public/favicon.ico",
+  "installerHeaderIcon": "public/favicon.ico",
+  "license": "build/license.txt",
+  "include": "build/installer.nsi",
+  "warningsAsErrors": false
+}
   }
 }
+

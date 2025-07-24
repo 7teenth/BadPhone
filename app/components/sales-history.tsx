@@ -29,7 +29,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
 
     const matchesSearch =
       sale.receipt_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sale.seller?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (sale.seller && sale.seller.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       sale.items_data.some((item: any) => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
 
     const matchesPayment = paymentFilter === "all" || sale.payment_method === paymentFilter
@@ -190,7 +190,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     <div className="text-right">
                       <div className="text-2xl font-bold text-green-600">{sale.total_amount.toLocaleString()} ₴</div>
                       <div className="text-sm text-gray-600">
-                        {sale.items_data.reduce((sum: number, item: any) => sum + item.cartQuantity, 0)} товарів
+                        {sale.items_data.reduce((sum: number, item: any) => sum + (item.cartQuantity ?? item.quantity ?? 1), 0)} товарів
                       </div>
                     </div>
                   </div>
@@ -205,7 +205,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                             {item.name} ({item.brand} {item.model})
                           </span>
                           <span className="text-gray-600">
-                            {item.cartQuantity} × {item.price} ₴ = {(item.cartQuantity * item.price).toLocaleString()} ₴
+                            {(item.cartQuantity ?? item.quantity ?? 1)} × {item.price} ₴ = {((item.cartQuantity ?? item.quantity ?? 1) * item.price).toLocaleString()} ₴
                           </span>
                         </div>
                       ))}

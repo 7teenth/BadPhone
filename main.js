@@ -1,31 +1,32 @@
-const { app, BrowserWindow } = require('electron')
-const path = require('path')
+const { app, BrowserWindow } = require('electron');
+const { exec } = require('child_process');
+
+let mainWindow;
 
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1200,
+  mainWindow = new BrowserWindow({
+    width: 1280,
     height: 800,
     webPreferences: {
-      nodeIntegration: false,
       contextIsolation: true,
     },
-  })
+  });
 
-  // Загружаем index.html из папки out
-  win.loadFile(path.join(__dirname, 'out', 'index.html'))
-
-  // Открой DevTools (если надо, можно закомментировать)
-  // win.webContents.openDevTools()
+  mainWindow.loadURL('http://localhost:3000'); // Next.js сервер
 }
 
 app.whenReady().then(() => {
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+  // запускаем сервер next start
+  exec('npx next start', (err, stdout, stderr) => {
+    if (err) {
+      console.error('Ошибка запуска next start:', err);
+      return;
+    }
+    console.log(stdout);
+    createWindow();
+  });
+});
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+  if (process.platform !== 'darwin') app.quit();
+});
