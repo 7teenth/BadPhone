@@ -1,26 +1,13 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { useApp } from "../context/app-context"
 import { Card, CardContent } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
 export function ShiftControl() {
-  const {
-    isShiftActive,
-    workingHours,
-    workingMinutes,
-    sales,
-    currentShift,
-    endShift,
-  } = useApp()
+  const { isShiftActive, workingHours, workingMinutes, sales, currentShift, endShift } = useApp()
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
@@ -45,9 +32,7 @@ export function ShiftControl() {
   const salesCount = shiftSales.length
 
   // 🔸 Окремі підсумки по способам оплати
-  const cashTotal = shiftSales
-    .filter((s) => s.payment_method === "cash")
-    .reduce((sum, s) => sum + s.total_amount, 0)
+  const cashTotal = shiftSales.filter((s) => s.payment_method === "cash").reduce((sum, s) => sum + s.total_amount, 0)
 
   const terminalTotal = shiftSales
     .filter((s) => s.payment_method === "terminal")
@@ -66,11 +51,7 @@ export function ShiftControl() {
 
   return (
     <>
-      <Button
-        variant="destructive"
-        onClick={handleCloseShiftClick}
-        className="flex items-center gap-2"
-      >
+      <Button variant="destructive" onClick={handleCloseShiftClick} className="flex items-center gap-2">
         Закінчити зміну
       </Button>
 
@@ -79,7 +60,6 @@ export function ShiftControl() {
           <DialogHeader>
             <DialogTitle>Підсумки зміни</DialogTitle>
           </DialogHeader>
-
           <Card>
             <CardContent className="space-y-2">
               <div>
@@ -104,7 +84,6 @@ export function ShiftControl() {
               </div>
             </CardContent>
           </Card>
-
           <DialogFooter className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Відмінити

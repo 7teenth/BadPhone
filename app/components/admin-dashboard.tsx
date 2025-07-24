@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -66,37 +66,35 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   })
 
   // Получаем все данные
-  const allDailyStats: DailyStat[] = getDailySalesStats() || []
-  const allTotalStats: TotalStats = getTotalStats() || {
-    totalRevenue: 0,
-    totalSales: 0,
-    averageSale: 0,
-    topSellingAmount: 0,
-    topSellingDay: "",
-    cashAmount: 0,
-    terminalAmount: 0,
-  }
+  const allDailyStats = useMemo(() => getDailySalesStats() || [], [sales, stores])
+const allTotalStats = useMemo(
+  () =>
+    getTotalStats() || {
+      totalRevenue: 0,
+      totalSales: 0,
+      averageSale: 0,
+      topSellingAmount: 0,
+      topSellingDay: "",
+      cashAmount: 0,
+      terminalAmount: 0,
+    },
+  [sales, stores]
+)
+
 
   // ✅ ИСПРАВЛЕНИЕ: Фильтрация данных по магазинам из БД
   useEffect(() => {
-    console.log("🔍 Filtering data for store:", selectedStoreId)
-    console.log("📊 Available sales:", sales.length)
-    console.log("🏪 Available stores:", stores.length)
+  if (selectedStoreId === "all") {
+    setFilteredDailyStats(allDailyStats)
+    setFilteredTotalStats(allTotalStats)
+  } else {
+    const filteredSales = sales.filter((sale) => sale.store_id === selectedStoreId)
+    const filteredStats = calculateStatsForSales(filteredSales)
+    setFilteredDailyStats(filteredStats.dailyStats)
+    setFilteredTotalStats(filteredStats.totalStats)
+  }
+}, [selectedStoreId, allDailyStats, allTotalStats, sales])
 
-    if (selectedStoreId === "all") {
-      setFilteredDailyStats(allDailyStats)
-      setFilteredTotalStats(allTotalStats)
-    } else {
-      // Фильтруем продажи по выбранному магазину
-      const filteredSales = sales.filter((sale) => sale.store_id === selectedStoreId)
-      console.log("🎯 Filtered sales for store:", filteredSales.length)
-
-      // Пересчитываем статистику для отфильтрованных продаж
-      const filteredStats = calculateStatsForSales(filteredSales)
-      setFilteredDailyStats(filteredStats.dailyStats)
-      setFilteredTotalStats(filteredStats.totalStats)
-    }
-  }, [selectedStoreId, allDailyStats, allTotalStats, sales])
 
   // ✅ ДОБАВЛЯЕМ: Функция для расчета статистики по отфильтрованным продажам
   const calculateStatsForSales = (salesData: any[]) => {
@@ -281,7 +279,12 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+              <Select value={selectedStoreId} onValueChange={(val) => {
+  if (val !== selectedStoreId) {
+    setSelectedStoreId(val)
+  }
+}}
+>
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="Оберіть магазин" />
                 </SelectTrigger>

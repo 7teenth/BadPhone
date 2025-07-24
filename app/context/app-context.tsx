@@ -556,94 +556,111 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const addSale = async (sale: Omit<Sale, "id" | "store_id" | "created_at">) => {
-    if (!isOnline || !currentUser) {
-      console.error("Offline or no user, cannot add sale")
+  if (!isOnline || !currentUser) {
+    console.error("Offline or no user, cannot add sale")
+    return
+  }
+  try {
+    const store_id = currentStore?.id || null
+
+    // Получаем количество текущих визитов
+    const { count: visitsCount, error: countError } = await supabase
+      .from("visits")
+      .select("id", { count: "exact", head: true })
+      .eq("store_id", store_id)
+    if (countError) {
+      console.error("Error counting visits:", countError)
+    }
+    const visitNumber = (visitsCount ?? 0) + 1
+
+    // Добавляем продажу
+    const { data, error } = await supabase
+      .from("sales")
+      .insert([
+        {
+          store_id,
+          seller_id: currentUser.id,
+          receipt_number: sale.receipt_number,
+          total_amount: sale.total_amount,
+          payment_method: sale.payment_method,
+          items_data: sale.items_data,
+        },
+      ])
+      .select()
+      .maybeSingle()
+    if (error) {
+      console.error("Error adding sale:", error)
       return
     }
-    try {
-      const store_id = currentStore?.id || null
-      const { count: visitsCount, error: countError } = await supabase
-        .from("visits")
-        .select("id", { count: "exact", head: true })
-        .eq("store_id", store_id)
-      if (countError) {
-        console.error("Error counting visits:", countError)
-      }
-      const visitNumber = (visitsCount ?? 0) + 1
-      const { data, error } = await supabase
-        .from("sales")
-        .insert([
-          {
-            store_id,
-            seller_id: currentUser.id,
-            receipt_number: sale.receipt_number,
-            total_amount: sale.total_amount,
-            payment_method: sale.payment_method,
-            items_data: sale.items_data,
-          },
-        ])
-        .select()
-        .maybeSingle()
-      if (error) {
-        console.error("Error adding sale:", error)
-        return
-      }
-      if (data) {
-        setSales((prev) => {
-          const updatedSales = [...prev, { ...data, seller: currentUser }]
-          const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
-          setTotalSalesAmount(total)
-          return updatedSales
-        })
-        for (const item of sale.items_data) {
-          const productId = item.product_id
-          const soldQty = item.quantity
-          if (!productId || !soldQty) continue
-          const existingProduct = products.find((p) => p.id === productId)
-          if (!existingProduct) continue
-          const newQty = Math.max(0, existingProduct.quantity - soldQty)
-          const { data: updatedProduct, error: updateError } = await supabase
-            .from("products")
-            .update({ quantity: newQty })
-            .eq("id", productId)
-            .select()
-            .maybeSingle()
-          if (updateError) {
-            console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
-          }
-          setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p)))
+
+    if (data) {
+      // Обновляем список продаж и сумму
+      setSales((prev) => {
+        const updatedSales = [...prev, { ...data, seller: currentUser }]
+        const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
+        setTotalSalesAmount(total)
+        return updatedSales
+      })
+
+      // Обновляем количество товаров после продажи
+      for (const item of sale.items_data) {
+        const productId = item.product_id
+        const soldQty = item.quantity
+        if (!productId || !soldQty) continue
+
+        const existingProduct = products.find((p) => p.id === productId)
+        if (!existingProduct) continue
+
+        const newQty = Math.max(0, existingProduct.quantity - soldQty)
+
+        const { error: updateError } = await supabase
+          .from("products")
+          .update({ quantity: newQty })
+          .eq("id", productId)
+
+        if (updateError) {
+          console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
         }
+
+        setProducts((prev) =>
+          prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p)),
+        )
       }
-      if (visitNumber) {
-        const { error: visitInsertError } = await supabase.from("visits").insert([
+    }
+
+    // Добавляем визит
+    if (visitNumber) {
+      const { error: visitInsertError } = await supabase.from("visits").insert([
+        {
+          store_id,
+          seller_id: currentUser.id,
+          title: `Візит №${visitNumber}`,
+          sale_amount: sale.total_amount,
+        },
+      ])
+
+      if (visitInsertError) {
+        console.error("Error adding visit:", visitInsertError)
+      } else {
+        setVisits((prev) => [
+          ...prev,
           {
-            store_id,
+            id: `visit-${Date.now()}`,
+            store_id: store_id || "",
             seller_id: currentUser.id,
             title: `Візит №${visitNumber}`,
             sale_amount: sale.total_amount,
+            created_at: new Date().toISOString(),
+            seller: currentUser,
           },
         ])
-        if (visitInsertError) {
-          console.error("Error adding visit:", visitInsertError)
-        } else {
-          setVisits((prev) => [
-            ...prev,
-            {
-              id: `visit-${Date.now()}`,
-              store_id: store_id || "",
-              seller_id: currentUser.id,
-              title: `Візит №${visitNumber}`,
-              sale_amount: sale.total_amount,
-              created_at: new Date().toISOString(),
-              seller: currentUser,
-            },
-          ])
-        }
       }
-    } catch (error) {
-      console.error("addSale failed:", error)
     }
+  } catch (error) {
+    console.error("addSale failed:", error)
   }
+}
+
 
   // ✅ УЛУЧШЕННЫЕ функции для админки с логированием
   const getDailySalesStats = () => {

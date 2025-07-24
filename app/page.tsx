@@ -1,12 +1,24 @@
 "use client"
 
-import { ShiftControl } from "../components/shift-control"
+import { ShiftControl } from "./components/shift-control"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Play, Clock, LogOut, User, BarChart3, Store, Wifi, WifiOff, Package, Search, History } from "lucide-react"
+import {
+  Play,
+  Clock,
+  LogOut,
+  User,
+  BarChart3,
+  Store,
+  Wifi,
+  WifiOff,
+  Package,
+  Search,
+  History,
+} from "lucide-react"
 import { ProductCatalog } from "./components/product-catalog"
 import SellPage from "./components/sell-page"
 import { FindProductPage } from "./components/find-product-page"
@@ -17,7 +29,6 @@ import { SalesHistory } from "./components/sales-history"
 import { UsersManagement } from "./components/users-management"
 
 type Page = "main" | "catalog" | "sell" | "find" | "admin" | "sales-history" | "users"
-
 type UserRole = "seller" | "owner"
 
 export default function MainPage() {
@@ -25,7 +36,6 @@ export default function MainPage() {
   const {
     currentTime,
     visits,
-    totalSalesAmount,
     workingHours,
     workingMinutes,
     startShift,
@@ -37,10 +47,10 @@ export default function MainPage() {
     currentStore,
     isOnline,
     logout,
+    getShiftStats,
   } = useApp() as {
     currentTime: string
     visits: any[]
-    totalSalesAmount: number
     workingHours: number
     workingMinutes: number
     startShift: () => void
@@ -52,15 +62,26 @@ export default function MainPage() {
     currentStore: { name: string } | null
     isOnline: boolean
     logout: () => void
+    getShiftStats: () => {
+      totalAmount: number
+      cashAmount: number
+      terminalAmount: number
+      count: number
+      totalItems: number
+      avgCheck: number
+      start: Date
+      end: Date
+    } | null
   }
 
   if (!isAuthenticated) return <LoginPage />
+
+  const shiftStats = getShiftStats()
 
   const handleSell = () => {
     if (!isShiftActive) startShift()
     setCurrentPage("sell")
   }
-
   const handleFindProduct = () => setCurrentPage("find")
   const handleSalesHistory = () => setCurrentPage("sales-history")
   const handleUsersManagement = () => setCurrentPage("users")
@@ -126,15 +147,23 @@ export default function MainPage() {
         <div className="flex items-center gap-6">
           {/* Статус підключення */}
           <div className="flex items-center gap-2">
-            {isOnline ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-red-400" />}
+            {isOnline ? (
+              <Wifi className="h-4 w-4 text-green-400" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-red-400" />
+            )}
           </div>
 
           {/* Інформація про користувача */}
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
             <span className="text-sm">{currentUser?.name}</span>
-            {currentUser?.role === "owner" && <Badge className="bg-purple-600 text-white text-xs">Власник</Badge>}
-            {currentUser?.role === "seller" && <Badge className="bg-blue-600 text-white text-xs">Продавець</Badge>}
+            {currentUser?.role === "owner" && (
+              <Badge className="bg-purple-600 text-white text-xs">Власник</Badge>
+            )}
+            {currentUser?.role === "seller" && (
+              <Badge className="bg-blue-600 text-white text-xs">Продавець</Badge>
+            )}
           </div>
 
           {/* Час на зміні */}
@@ -151,7 +180,12 @@ export default function MainPage() {
           <div className="text-lg font-mono bg-gray-800 px-3 py-1 rounded">{currentTime}</div>
 
           {/* Кнопка виходу */}
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-white hover:bg-gray-800 px-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-white hover:bg-gray-800 px-3"
+          >
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
@@ -188,7 +222,7 @@ export default function MainPage() {
           {/* Продати - доступно всім */}
           <Button
             onClick={handleSell}
-            className="bg-green-600 hover:bg-green-700 text-white h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
+            className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
             disabled={!isOnline || !isShiftActive}
           >
             <div className="text-2xl">💰</div>
@@ -200,7 +234,7 @@ export default function MainPage() {
           {/* Знайти товар - доступно всім */}
           <Button
             onClick={handleFindProduct}
-            className="bg-blue-600 hover:bg-blue-700 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
+            className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
           >
             <Search className="h-6 w-6" />
             <span>Знайти товар</span>
@@ -209,17 +243,17 @@ export default function MainPage() {
           {/* Історія продажів - доступно всім */}
           <Button
             onClick={handleSalesHistory}
-            className="bg-purple-600 hover:bg-purple-700 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
+            className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
           >
             <History className="h-6 w-6" />
             <span>Історія продажів</span>
           </Button>
 
-          {/* ✅ ИСПРАВЛЕНИЕ: Внести товар - только для owner */}
+          {/* Внести товар - тільки для owner */}
           {currentUser?.role === "owner" && (
             <Button
               onClick={handleAddProduct}
-              className="bg-orange-600 hover:bg-orange-700 text-white h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
+              className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
               disabled={!isOnline}
             >
               <Package className="h-6 w-6" />
@@ -229,7 +263,7 @@ export default function MainPage() {
           )}
         </div>
 
-        {/* ✅ ИСПРАВЛЕНИЕ: Админ панель - только для owner, отдельный блок */}
+        {/* Адмін панель - тільки для owner */}
         {currentUser?.role === "owner" && (
           <div className="mt-6">
             <h2 className="text-xl font-medium text-gray-800 mb-4">Адміністрування</h2>
@@ -299,7 +333,8 @@ export default function MainPage() {
       {/* Нижній блок зі статистикою */}
       <div className="bg-gray-300 p-6 space-y-2 text-gray-800">
         <div className="text-lg">
-          <span className="font-medium">Всього продано на суму:</span> {totalSalesAmount.toLocaleString()} грн.
+          <span className="font-medium">Всього продано на суму:</span>{" "}
+          {(shiftStats?.totalAmount ?? 0).toLocaleString()} грн.
         </div>
         <div className="text-lg">
           <span className="font-medium">Час на зміні:</span> {workingHours} год. {workingMinutes} хв.
