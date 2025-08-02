@@ -1,292 +1,251 @@
 "use client"
 
 import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Save } from "lucide-react"
-import type { Product } from "@/lib/types"
-
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useApp } from "../context/app-context"
 
 interface ProductFormProps {
-  product?: Product | null
-  onSave: (product: Omit<Product, "id" | "created_at">) => void
+  product?: any
+  onSubmit: (productData: any) => void
   onCancel: () => void
 }
 
-type FormData = {
-  name: string
-  category: string
-  price: string
-  purchasePrice: string
-  quantity: string
-  description: string
-  brand: string
-  model: string
-}
-
-export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
-  const [formData, setFormData] = useState<FormData>({
+export function ProductForm({ product, onSubmit, onCancel }: ProductFormProps) {
+  const { stores, currentUser } = useApp()
+  const [formData, setFormData] = useState({
     name: "",
     category: "",
     price: "",
-    purchasePrice: "",
     quantity: "",
     description: "",
     brand: "",
     model: "",
+    barcode: "",
+    store_id: "",
   })
-
-  const [errors, setErrors] = useState<Record<keyof FormData, string>>({} as Record<keyof FormData, string>)
-
-  const categories = [
-    "Захисне скло",
-    "Чохли",
-    "Зарядні пристрої",
-    "Навушники",
-    "PowerBank",
-    "Годинник",
-    "Колонки",
-    "Компʼютерна периферія",
-    "Автомобільні аксесуари",
-    "Освітлення",
-    "Різне",
-  ]
 
   useEffect(() => {
     if (product) {
       setFormData({
-        name: product.name,
-        category: product.category,
-        price: product.price.toString(),
-        purchasePrice: product.purchasePrice?.toString() ?? "",
-        quantity: product.quantity.toString(),
-        description: product.description ?? "",
-        brand: product.brand,
-        model: product.model,
+        name: product.name || "",
+        category: product.category || "",
+        price: product.price?.toString() || "",
+        quantity: product.quantity?.toString() || "",
+        description: product.description || "",
+        brand: product.brand || "",
+        model: product.model || "",
+        barcode: product.barcode || "",
+        store_id: product.store_id || "",
       })
-      setErrors({} as Record<keyof FormData, string>)
+    } else {
+      // Для нового товара устанавливаем магазин по умолчанию
+      setFormData((prev) => ({
+        ...prev,
+        store_id: currentUser?.store_id || "",
+      }))
     }
-  }, [product])
-
-  const validateForm = () => {
-    const newErrors: Partial<Record<keyof FormData, string>> = {}
-
-    if (!formData.name.trim()) {
-      newErrors.name = "Назва товару обов'язкова"
-    }
-
-    if (!formData.category) {
-      newErrors.category = "Оберіть категорію"
-    }
-
-    if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
-      newErrors.price = "Введіть коректну ціну"
-    }
-
-    if (
-      formData.purchasePrice === "" ||
-      isNaN(Number(formData.purchasePrice)) ||
-      Number(formData.purchasePrice) < 0
-    ) {
-      newErrors.purchasePrice = "Введіть коректну ціну закупки"
-    }
-
-    if (!formData.quantity || isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0) {
-      newErrors.quantity = "Введіть коректну кількість"
-    }
-
-    if (!formData.brand.trim()) {
-      newErrors.brand = "Бренд обов'язковий"
-    }
-
-    if (!formData.model.trim()) {
-      newErrors.model = "Модель обов'язкова"
-    }
-
-    setErrors(newErrors as Record<keyof FormData, string>)
-    return Object.keys(newErrors).length === 0
-  }
+  }, [product, currentUser])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm()) return
+    if (
+      !formData.name ||
+      !formData.category ||
+      !formData.price ||
+      !formData.quantity ||
+      !formData.brand ||
+      !formData.model
+    ) {
+      alert("Заповніть всі обов'язкові поля")
+      return
+    }
 
-    onSave({
+    const price = Number.parseFloat(formData.price)
+    const quantity = Number.parseInt(formData.quantity)
+
+    if (isNaN(price) || price <= 0) {
+      alert("Введіть коректну ціну")
+      return
+    }
+
+    if (isNaN(quantity) || quantity < 0) {
+      alert("Введіть коректну кількість")
+      return
+    }
+
+    const productData = {
       name: formData.name.trim(),
-      category: formData.category,
-      price: Number(formData.price),
-      purchasePrice: Number(formData.purchasePrice),
-      quantity: Number(formData.quantity),
+      category: formData.category.trim(),
+      price,
+      quantity,
       description: formData.description.trim(),
       brand: formData.brand.trim(),
       model: formData.model.trim(),
-    })
+      barcode: formData.barcode.trim() || null,
+      store_id: formData.store_id || null,
+    }
+
+    onSubmit(productData)
   }
 
-  const handleInputChange = (field: keyof FormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }))
-    }
-  }
+  const categories = [
+    "Смартфони",
+    "Планшети",
+    "Ноутбуки",
+    "Аксесуари",
+    "Навушники",
+    "Зарядні пристрої",
+    "Чохли",
+    "Захисні скла",
+    "Інше",
+  ]
 
   return (
-    <div className="min-h-screen bg-gray-200">
-      {/* Header */}
-      <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onCancel} className="text-white hover:bg-gray-800">
-          <ArrowLeft className="h-6 w-6" />
-        </Button>
-        <h1 className="text-2xl font-bold">{product ? "Редагувати товар" : "Додати товар"}</h1>
-      </header>
+    <Card>
+      <CardHeader>
+        <CardTitle>{product ? "Редагувати товар" : "Додати новий товар"}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Назва товару *</label>
+              <Input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Введіть назву товару"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Категорія *</label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) => setFormData({ ...formData, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Виберіть категорію" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      {/* Form */}
-      <div className="p-6">
-        <Card className="max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle>{product ? "Редагування товару" : "Новий товар"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-              {/* Назва */}
-              <div className="space-y-2">
-                <Label htmlFor="name">Назва товару *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange("name", e.target.value)}
-                  placeholder="Введіть назву товару"
-                  className={errors.name ? "border-red-500" : ""}
-                />
-                {errors.name && <p className="text-red-500 text-sm">{errors.name}</p>}
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Бренд *</label>
+              <Input
+                type="text"
+                value={formData.brand}
+                onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                placeholder="Введіть бренд"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Модель *</label>
+              <Input
+                type="text"
+                value={formData.model}
+                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                placeholder="Введіть модель"
+                required
+              />
+            </div>
+          </div>
 
-              {/* Категорія */}
-              <div className="space-y-2">
-                <Label htmlFor="category">Категорія *</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Ціна (₴) *</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Кількість *</label>
+              <Input
+                type="number"
+                min="0"
+                value={formData.quantity}
+                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                placeholder="0"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Штрих-код</label>
+              <Input
+                type="text"
+                value={formData.barcode}
+                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                placeholder="Введіть штрих-код"
+              />
+            </div>
+            {currentUser?.role === "owner" && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Магазин</label>
                 <Select
-                  value={formData.category}
-                  onValueChange={(value) => handleInputChange("category", value)}
+                  value={formData.store_id}
+                  onValueChange={(value) => setFormData({ ...formData, store_id: value })}
                 >
-                  <SelectTrigger className={errors.category ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Оберіть категорію" />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Виберіть магазин" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
+                    {stores.map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.category && <p className="text-red-500 text-sm">{errors.category}</p>}
               </div>
+            )}
+          </div>
 
-              {/* Бренд та Модель */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="brand">Бренд *</Label>
-                  <Input
-                    id="brand"
-                    value={formData.brand}
-                    onChange={(e) => handleInputChange("brand", e.target.value)}
-                    placeholder="Введіть бренд"
-                    className={errors.brand ? "border-red-500" : ""}
-                  />
-                  {errors.brand && <p className="text-red-500 text-sm">{errors.brand}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="model">Модель *</Label>
-                  <Input
-                    id="model"
-                    value={formData.model}
-                    onChange={(e) => handleInputChange("model", e.target.value)}
-                    placeholder="Введіть модель"
-                    className={errors.model ? "border-red-500" : ""}
-                  />
-                  {errors.model && <p className="text-red-500 text-sm">{errors.model}</p>}
-                </div>
-              </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Опис</label>
+            <Textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Введіть опис товару"
+              rows={3}
+            />
+          </div>
 
-              {/* Ціна, Ціна закупки та Кількість */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="price">Ціна (₴) *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => handleInputChange("price", e.target.value)}
-                    placeholder="0.00"
-                    className={errors.price ? "border-red-500" : ""}
-                  />
-                  {errors.price && <p className="text-red-500 text-sm">{errors.price}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="purchasePrice">Ціна закупки (₴) *</Label>
-                  <Input
-                    id="purchasePrice"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.purchasePrice}
-                    onChange={(e) => handleInputChange("purchasePrice", e.target.value)}
-                    placeholder="0.00"
-                    className={errors.purchasePrice ? "border-red-500" : ""}
-                  />
-                  {errors.purchasePrice && <p className="text-red-500 text-sm">{errors.purchasePrice}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Кількість *</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    min="0"
-                    value={formData.quantity}
-                    onChange={(e) => handleInputChange("quantity", e.target.value)}
-                    placeholder="0"
-                    className={errors.quantity ? "border-red-500" : ""}
-                  />
-                  {errors.quantity && <p className="text-red-500 text-sm">{errors.quantity}</p>}
-                </div>
-              </div>
-
-              {/* Опис */}
-              <div className="space-y-2">
-                <Label htmlFor="description">Опис</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => handleInputChange("description", e.target.value)}
-                  placeholder="Введіть опис товару"
-                  rows={3}
-                />
-              </div>
-
-              {/* Кнопки дії */}
-              <div className="flex gap-4 pt-4">
-                <Button type="submit" className="bg-black hover:bg-gray-800 text-white flex-1">
-                  <Save className="h-4 w-4 mr-2" />
-                  {product ? "Зберегти зміни" : "Додати товар"}
-                </Button>
-                <Button type="button" variant="outline" onClick={onCancel} className="flex-1 bg-transparent">
-                  Скасувати
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          <div className="flex justify-end gap-4 pt-4">
+            <Button type="button" variant="secondary" onClick={onCancel}>
+              Скасувати
+            </Button>
+            <Button type="submit" className="bg-green-600 hover:bg-green-700">
+              {product ? "Зберегти зміни" : "Додати товар"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

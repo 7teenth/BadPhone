@@ -54,6 +54,7 @@ interface Sale {
 
 interface Visit {
   id: string
+  sale_id: string
   store_id: string
   seller_id?: string
   title: string
@@ -64,10 +65,10 @@ interface Visit {
 
 interface Shift {
   id: string
-  store_id: string
+  store_id?: string
   user_id: string
   start_time: string
-  end_time?: string
+  end_time?: string | null
   total_sales: number
   created_at: string
   user?: User
@@ -125,6 +126,9 @@ interface AppContextType extends AppState {
     avgCheck: number
   } | null
   currentStoreId: string | null
+  refreshVisits?: () => Promise<void>
+  removeVisit: (visitId: string) => void
+  storesLoading: boolean
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -136,6 +140,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [stores, setStores] = useState<Store[]>([])
+  const [storesLoading, setStoresLoading] = useState(true)
   const [currentShift, setCurrentShift] = useState<Shift | null>(null)
   const [totalSalesAmount, setTotalSalesAmount] = useState(0)
   const [workingHours, setWorkingHours] = useState(0)
@@ -147,21 +152,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const currentStoreId = currentStore?.id || null
 
+  const removeVisit = (visitId: string) => {
+    console.log("🗑️ Removing visit from UI:", visitId)
+    setVisits((prev) => {
+      const filtered = prev.filter((visit) => visit.id !== visitId)
+      console.log("✅ Visits updated, remaining:", filtered.length)
+      return filtered
+    })
+  }
+
   useEffect(() => {
+    if (!isOnline) return
+    let cancelled = false
     const loadStores = async () => {
-      if (!isOnline) return
       try {
+        setStoresLoading(true)
         const { data: storesData, error } = await supabase.from("stores").select("*")
         if (error) {
           console.error("Error loading stores:", error)
           return
         }
-        if (storesData) setStores(storesData)
+        if (!cancelled && storesData) {
+          setStores(storesData)
+        }
       } catch (error) {
         console.error("Error loading stores:", error)
+      } finally {
+        if (!cancelled) {
+          setStoresLoading(false)
+        }
       }
     }
     loadStores()
+    return () => {
+      cancelled = true
+    }
   }, [isOnline])
 
   useEffect(() => {
@@ -218,17 +243,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isOnline])
 
-  // ✅ ИСПРАВЛЕННАЯ функция loadData
   const loadData = async (user: User | null) => {
     if (!isOnline) return
-
     try {
       console.log("🔄 Loading data for user:", user?.name, "role:", user?.role)
-
-      // Загружаем базовые данные
       const { data: storesData } = await supabase.from("stores").select("*")
       if (storesData) setStores(storesData)
-
       const { data: usersData } = await supabase.from("users").select("*")
       if (usersData) {
         const usersWithStores = usersData.map((userItem) => {
@@ -242,32 +262,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await loadProducts(user)
       }
 
-      // Функция для пересчета общей суммы продаж
       const recalcTotalSalesAmount = (salesList: Sale[]) => {
         const total = salesList.reduce((sum, sale) => sum + sale.total_amount, 0)
         setTotalSalesAmount(total)
       }
 
       if (user) {
-        // Загружаем текущую смену
         const { data: shiftData } = await supabase
           .from("shifts")
           .select("*")
           .eq("user_id", user.id)
           .is("end_time", null)
           .maybeSingle()
-
         setCurrentShift(shiftData || null)
 
-        // ✅ ИСПРАВЛЕНИЕ: Загружаем ВСЕ исторические данные независимо от смены
         if (user.role === "owner") {
           console.log("📊 Loading ALL data for owner")
-
-          // Загружаем ВСЕ продажи для owner'а
           const { data: salesData } = await supabase.from("sales").select("*").order("created_at", { ascending: false })
-
           console.log("📈 All sales data loaded:", salesData?.length || 0, "sales")
-
           const { data: visitsData } = await supabase
             .from("visits")
             .select("*")
@@ -280,12 +292,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             })
             setSales(salesWithSellers)
             recalcTotalSalesAmount(salesWithSellers)
-            console.log(
-              "✅ Sales set:",
-              salesWithSellers.length,
-              "total amount:",
-              salesWithSellers.reduce((sum, s) => sum + s.total_amount, 0),
-            )
           }
 
           if (visitsData) {
@@ -297,18 +303,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         } else if (user.store_id) {
           console.log("🏪 Loading store data for seller, store_id:", user.store_id)
-
-          // Загружаем ВСЕ продажи магазина для seller'а
+          const today = new Date()
+          const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
           const { data: salesData } = await supabase
             .from("sales")
             .select("*")
             .eq("store_id", user.store_id)
+            .eq("seller_id", user.id)
+            .gte("created_at", startOfDay)
             .order("created_at", { ascending: false })
 
           const { data: visitsData } = await supabase
             .from("visits")
             .select("*")
             .eq("store_id", user.store_id)
+            .eq("seller_id", user.id)
+            .gte("created_at", startOfDay)
             .order("created_at", { ascending: false })
 
           if (salesData) {
@@ -347,6 +357,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         data = res.data
         error = res.error
       }
+
       if (error) throw error
       if (data) setProducts(data)
     } catch (error) {
@@ -358,16 +369,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline) return false
     const hashedPassword = hashPassword(password)
     const cleanLogin = login.trim().toLowerCase()
+
     try {
       const { data: userData, error } = await supabase.from("users").select("*").eq("login", cleanLogin).maybeSingle()
+
       if (error || !userData) {
         console.error("Login error or user not found:", error)
         return false
       }
+
       if (userData.password_hash !== hashedPassword) {
         console.error("Invalid password")
         return false
       }
+
       let storeData: Store | null = null
       if (selectedStoreId) {
         const { data: store, error: storeError } = await supabase
@@ -375,19 +390,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .select("*")
           .eq("id", selectedStoreId)
           .maybeSingle()
+
         if (storeError) {
           console.error("Error loading selected store:", storeError)
           return false
         }
         storeData = store
       }
+
       const userWithStore: User = {
         ...userData,
         store: storeData || undefined,
       }
+
       setCurrentUser(userWithStore)
       setCurrentStore(storeData)
       setIsAuthenticated(true)
+
       await loadData(userWithStore)
       return true
     } catch (error) {
@@ -418,12 +437,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline) return false
     const hashedPassword = hashPassword(password)
     const store_id_to_insert = typeof storeId === "string" && storeId.trim() !== "" ? storeId : null
+
     try {
       const { data: existingUser } = await supabase.from("users").select("id").eq("login", login).maybeSingle()
+
       if (existingUser) {
         console.error("User already exists")
         return false
       }
+
       const { error: insertError } = await supabase.from("users").insert({
         login,
         password_hash: hashedPassword,
@@ -431,10 +453,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         role: "seller",
         store_id: store_id_to_insert,
       })
+
       if (insertError) {
         console.error("Insert user error:", insertError)
         return false
       }
+
       await loadData(currentUser)
       return true
     } catch (error) {
@@ -445,8 +469,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const startShift = async () => {
     if (!isOnline || !currentUser || currentShift) return
+
     try {
-      await supabase.from("visits").delete().eq("store_id", currentStore?.id)
+      if (currentStore?.id) {
+        await supabase.from("visits").delete().eq("store_id", currentStore.id)
+      }
+
       const now = new Date().toISOString()
       const { data, error } = await supabase
         .from("shifts")
@@ -458,11 +486,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
         .select()
         .maybeSingle()
+
       if (error) {
         console.error("Error starting shift:", error)
         return
       }
+
       setCurrentShift(data || null)
+      setVisits([])
     } catch (err) {
       console.error("Failed to start shift:", err)
     }
@@ -470,16 +501,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const endShift = async () => {
     if (!isOnline || !currentShift) return
+
     try {
       const now = new Date().toISOString()
       const { error } = await supabase.from("shifts").update({ end_time: now }).eq("id", currentShift.id)
+
       if (error) {
         console.error("Error ending shift:", error)
         return
       }
-      await supabase.from("visits").delete().eq("store_id", currentStore?.id)
+
+      if (currentStore?.id) {
+        await supabase.from("visits").delete().eq("store_id", currentStore.id)
+      }
+
       setCurrentShift({ ...currentShift, end_time: now })
       setTotalSalesAmount(0)
+      setVisits([])
     } catch (err) {
       console.error("Failed to end shift:", err)
     }
@@ -489,23 +527,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     product: Omit<Product, "id" | "created_at" | "updated_at"> & { store_id: string | null },
   ): Promise<void> => {
     if (!isOnline || !currentUser) return
+
     try {
       const { store_id, ...rest } = product
       const actualStoreId = store_id || currentUser.store_id || null
+
       if (!actualStoreId) {
         console.error("store_id is required to add a product")
         return
       }
+
       console.log("Adding product with:", { ...rest, store_id: actualStoreId })
+
       const { data, error } = await supabase
         .from("products")
         .insert([{ ...rest, store_id: actualStoreId }])
         .select()
         .maybeSingle()
+
       if (error) {
         console.error("Error adding product:", error)
         return
       }
+
       if (data) {
         setProducts((prev) => [...prev, data])
       }
@@ -516,23 +560,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateProduct = async (id: string, product: Partial<Product>): Promise<void> => {
     if (!isOnline) return
+
     const cleanProductEntries = Object.entries(product).filter(([key, value]) => {
       if (value === undefined) return false
       if (key.endsWith("_id") && (value === "" || value === null)) return false
       if (value === "") return false
       return true
     })
+
     const cleanProduct = Object.fromEntries(cleanProductEntries)
+
     if (!id || Object.keys(cleanProduct).length === 0) {
       console.warn("updateProduct skipped: invalid id or empty product")
       return
     }
+
     try {
       const { data, error } = await supabase.from("products").update(cleanProduct).eq("id", id).select().maybeSingle()
+
       if (error) {
         console.error("Error updating product (full error):", JSON.stringify(error, null, 2))
         return
       }
+
       if (data) {
         setProducts((prev) => prev.map((p) => (p.id === id ? data : p)))
       }
@@ -543,129 +593,192 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProduct = async (id: string): Promise<void> => {
     if (!isOnline) return
+
     try {
       const { error } = await supabase.from("products").delete().eq("id", id)
+
       if (error) {
         console.error("Error deleting product:", error)
         return
       }
+
       setProducts((prev) => prev.filter((p) => p.id !== id))
     } catch (error) {
       console.error("deleteProduct failed:", error)
     }
   }
 
+  // ✅ ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ функция addSale с детальным логированием
   const addSale = async (sale: Omit<Sale, "id" | "store_id" | "created_at">) => {
-  if (!isOnline || !currentUser) {
-    console.error("Offline or no user, cannot add sale")
-    return
-  }
-  try {
-    const store_id = currentStore?.id || null
+    console.log("🚨 addSale ВЫЗВАНА! Параметры:", sale)
 
-    // Получаем количество текущих визитов
-    const { count: visitsCount, error: countError } = await supabase
-      .from("visits")
-      .select("id", { count: "exact", head: true })
-      .eq("store_id", store_id)
-    if (countError) {
-      console.error("Error counting visits:", countError)
-    }
-    const visitNumber = (visitsCount ?? 0) + 1
-
-    // Добавляем продажу
-    const { data, error } = await supabase
-      .from("sales")
-      .insert([
-        {
-          store_id,
-          seller_id: currentUser.id,
-          receipt_number: sale.receipt_number,
-          total_amount: sale.total_amount,
-          payment_method: sale.payment_method,
-          items_data: sale.items_data,
-        },
-      ])
-      .select()
-      .maybeSingle()
-    if (error) {
-      console.error("Error adding sale:", error)
+    if (!isOnline || !currentUser) {
+      console.error("❌ Offline or no user, cannot add sale")
       return
     }
 
-    if (data) {
-      // Обновляем список продаж и сумму
-      setSales((prev) => {
-        const updatedSales = [...prev, { ...data, seller: currentUser }]
-        const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
-        setTotalSalesAmount(total)
-        return updatedSales
-      })
+    console.log("🛒 Starting addSale process...")
+    console.log("📦 Sale items:", sale.items_data)
+    console.log("💰 Total amount:", sale.total_amount)
 
-      // Обновляем количество товаров после продажи
-      for (const item of sale.items_data) {
-        const productId = item.product_id
-        const soldQty = item.quantity
-        if (!productId || !soldQty) continue
+    try {
+      const store_id = currentStore?.id || null
 
-        const existingProduct = products.find((p) => p.id === productId)
-        if (!existingProduct) continue
+      // Получаем количество текущих визитов
+      const { count: visitsCount, error: countError } = await supabase
+        .from("visits")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", store_id)
 
-        const newQty = Math.max(0, existingProduct.quantity - soldQty)
-
-        const { error: updateError } = await supabase
-          .from("products")
-          .update({ quantity: newQty })
-          .eq("id", productId)
-
-        if (updateError) {
-          console.error(`Не вдалося оновити кількість товару ID ${productId}:`, updateError)
-        }
-
-        setProducts((prev) =>
-          prev.map((p) => (p.id === productId ? { ...p, quantity: newQty } : p)),
-        )
+      if (countError) {
+        console.error("Error counting visits:", countError)
       }
-    }
 
-    // Добавляем визит
-    if (visitNumber) {
-      const { error: visitInsertError } = await supabase.from("visits").insert([
-        {
-          store_id,
-          seller_id: currentUser.id,
-          title: `Візит №${visitNumber}`,
-          sale_amount: sale.total_amount,
-        },
-      ])
+      const visitNumber = (visitsCount ?? 0) + 1
 
-      if (visitInsertError) {
-        console.error("Error adding visit:", visitInsertError)
-      } else {
-        setVisits((prev) => [
-          ...prev,
+      // Добавляем продажу
+      console.log("💾 Inserting sale into database...")
+      const { data: saleData, error: saleError } = await supabase
+        .from("sales")
+        .insert([
           {
-            id: `visit-${Date.now()}`,
-            store_id: store_id || "",
+            store_id,
             seller_id: currentUser.id,
-            title: `Візит №${visitNumber}`,
-            sale_amount: sale.total_amount,
-            created_at: new Date().toISOString(),
-            seller: currentUser,
+            receipt_number: sale.receipt_number,
+            total_amount: sale.total_amount,
+            payment_method: sale.payment_method,
+            items_data: sale.items_data,
           },
         ])
+        .select()
+        .maybeSingle()
+
+      if (saleError) {
+        console.error("❌ Error adding sale:", saleError)
+        return
       }
+
+      console.log("✅ Sale added successfully:", saleData)
+
+      if (saleData) {
+        // Обновляем список продаж и сумму
+        setSales((prev) => {
+          const updatedSales = [...prev, { ...saleData, seller: currentUser }]
+          const total = updatedSales.reduce((sum, s) => sum + s.total_amount, 0)
+          setTotalSalesAmount(total)
+          return updatedSales
+        })
+
+        // ✅ ОБНОВЛЕНИЕ КОЛИЧЕСТВА ТОВАРОВ
+        console.log("🔄 Starting product quantity updates...")
+        console.log("📋 Current products in state:", products.length)
+
+        // Обрабатываем каждый товар в продаже
+        for (const item of sale.items_data) {
+          const productId = item.product_id
+          const soldQty = item.quantity
+
+          console.log(`\n📦 Processing item:`, {
+            productId,
+            soldQty,
+            productName: item.product_name,
+          })
+
+          if (!productId || !soldQty) {
+            console.warn("⚠️ Missing product_id or quantity in sale item:", item)
+            continue
+          }
+
+          // Находим товар в локальном состоянии
+          const existingProduct = products.find((p) => p.id === productId)
+          if (!existingProduct) {
+            console.warn(`⚠️ Product ${productId} not found in local state`)
+            console.log(
+              "Available product IDs:",
+              products.map((p) => p.id),
+            )
+            continue
+          }
+
+          const currentQty = existingProduct.quantity
+          const newQty = Math.max(0, currentQty - soldQty)
+
+          console.log(`📊 Product ${productId} (${existingProduct.name}):`)
+          console.log(`   Current quantity: ${currentQty}`)
+          console.log(`   Sold quantity: ${soldQty}`)
+          console.log(`   New quantity: ${newQty}`)
+
+          // Обновляем в Supabase
+          console.log(`💾 Updating product ${productId} in Supabase...`)
+          const { data: updatedProduct, error: updateError } = await supabase
+            .from("products")
+            .update({ quantity: newQty })
+            .eq("id", productId)
+            .select()
+            .maybeSingle()
+
+          if (updateError) {
+            console.error(`❌ Failed to update product ${productId} in Supabase:`, updateError)
+            continue
+          }
+
+          if (updatedProduct) {
+            console.log(`✅ Product ${productId} updated in Supabase:`, updatedProduct)
+
+            // Обновляем локальное состояние
+            setProducts((prev) => {
+              const updated = prev.map((p) => (p.id === productId ? updatedProduct : p))
+              console.log(`🔄 Updated local state for product ${productId}`)
+              return updated
+            })
+          } else {
+            console.warn(`⚠️ No data returned from Supabase for product ${productId}`)
+          }
+        }
+
+        console.log("✅ All product updates completed")
+      }
+
+      // Добавляем визит
+      if (visitNumber) {
+        console.log("🏪 Adding visit...")
+        const { error: visitInsertError } = await supabase.from("visits").insert([
+          {
+            store_id,
+            seller_id: currentUser.id,
+            title: `Візит ${visitNumber}`,
+            sale_amount: sale.total_amount,
+          },
+        ])
+
+        if (visitInsertError) {
+          console.error("❌ Error adding visit:", visitInsertError)
+        } else {
+          console.log("✅ Visit added successfully")
+          setVisits((prev) => [
+            ...prev,
+            {
+              id: `visit-${Date.now()}`,
+              sale_id: saleData?.id || "uuid-from-sales",
+              store_id: store_id || "",
+              seller_id: currentUser.id,
+              title: `Візит ${visitNumber}`,
+              sale_amount: sale.total_amount,
+              created_at: new Date().toISOString(),
+              seller: currentUser,
+            },
+          ])
+        }
+      }
+
+      console.log("🎉 addSale process completed successfully!")
+    } catch (error) {
+      console.error("❌ addSale failed:", error)
     }
-  } catch (error) {
-    console.error("addSale failed:", error)
   }
-}
 
-
-  // ✅ УЛУЧШЕННЫЕ функции для админки с логированием
   const getDailySalesStats = () => {
     console.log("📊 getDailySalesStats called, sales count:", sales.length)
-
     if (!sales || sales.length === 0) {
       console.log("❌ No sales data available")
       return []
@@ -681,11 +794,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     > = {}
 
     sales.forEach((sale) => {
-      // ✅ ИСПРАВЛЕНИЕ: Правильное форматирование даты
-      const date = new Date(sale.created_at).toISOString().split("T")[0] // Получаем YYYY-MM-DD
+      const date = new Date(sale.created_at).toISOString().split("T")[0]
+
       if (!statsMap[date]) {
         statsMap[date] = { salesCount: 0, totalAmount: 0, sellers: {} }
       }
+
       statsMap[date].salesCount += 1
       statsMap[date].totalAmount += sale.total_amount
 
@@ -710,7 +824,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         totalAmount: stats.totalAmount,
         sellers: stats.sellers,
       }))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Сортируем по дате (новые сверху)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
     console.log("✅ Daily stats result:", result)
     return result
@@ -718,7 +832,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getTotalStats = () => {
     console.log("📈 getTotalStats called, sales count:", sales.length)
-
     if (!sales || sales.length === 0) {
       console.log("❌ No sales data for total stats")
       return {
@@ -736,7 +849,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const totalSales = sales.length
     const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0
 
-    // Найти самый прибыльный день
     const dateStats: Record<string, number> = {}
     sales.forEach((sale) => {
       const date = new Date(sale.created_at).toISOString().split("T")[0]
@@ -752,7 +864,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    // Суммы по типу оплаты
     const cashAmount = sales.filter((s) => s.payment_method === "cash").reduce((sum, s) => sum + s.total_amount, 0)
     const terminalAmount = sales
       .filter((s) => s.payment_method === "terminal")
@@ -773,13 +884,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const getShiftStats = () => {
-    if (!currentShift) return null
+    if (!currentShift) {
+      console.log("getShiftStats: no currentShift")
+      return null
+    }
+
     const start = new Date(currentShift.start_time)
     const end = currentShift.end_time ? new Date(currentShift.end_time) : new Date()
+
+    console.log("Shift start:", start.toISOString(), "end:", end.toISOString())
+    console.log("Total sales count:", sales.length)
+
     const salesDuringShift = sales.filter((s) => {
       const created = new Date(s.created_at)
-      return created >= start && created <= end
+      const isInTimeRange = created >= start && created <= end
+      const isCurrentUser = currentUser?.role === "seller" ? s.seller_id === currentUser.id : true
+      const isCurrentStore = currentStore ? s.store_id === currentStore.id : true
+      return isInTimeRange && isCurrentUser && isCurrentStore
     })
+
+    console.log("Sales during shift count:", salesDuringShift.length)
+
     const totalAmount = salesDuringShift.reduce((sum, s) => sum + s.total_amount, 0)
     const cashAmount = salesDuringShift
       .filter((s) => s.payment_method === "cash")
@@ -788,9 +913,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .filter((s) => s.payment_method === "terminal")
       .reduce((sum, s) => sum + s.total_amount, 0)
     const count = salesDuringShift.length
-    const totalItems = salesDuringShift.reduce((sum, s) => sum + s.items_data.length, 0)
+    const totalItems = salesDuringShift.reduce((sum, s) => sum + (s.items_data?.length || 0), 0)
     const avgCheck = count > 0 ? totalAmount / count : 0
+
+    console.log("✅ Shift stats calculated:", { totalAmount, cashAmount, terminalAmount, count, totalItems, avgCheck })
+
     return { start, end, totalAmount, cashAmount, terminalAmount, count, totalItems, avgCheck }
+  }
+
+  const refreshVisits = async () => {
+    if (!currentUser || !currentStore) return
+
+    try {
+      const { data: visitsData } = await supabase
+        .from("visits")
+        .select("*")
+        .eq("store_id", currentStore.id)
+        .order("created_at", { ascending: false })
+
+      if (visitsData) {
+        const visitsWithSellers = visitsData.map((visit) => {
+          const seller = users.find((u) => u.id === visit.seller_id)
+          return { ...visit, seller }
+        })
+        setVisits(visitsWithSellers)
+      }
+    } catch (error) {
+      console.error("Error refreshing visits:", error)
+    }
   }
 
   const isShiftActive = Boolean(currentShift && !currentShift.end_time)
@@ -804,12 +954,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteUser = async (userId: string): Promise<boolean> => {
     if (!isOnline) return false
+
     try {
       const { error } = await supabase.from("users").delete().eq("id", userId)
+
       if (error) {
         console.error("Error deleting user:", error)
         return false
       }
+
       await loadData(currentUser)
       return true
     } catch (error) {
@@ -852,6 +1005,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getTotalStats,
         getShiftStats,
         loadData,
+        refreshVisits,
+        removeVisit,
+        storesLoading,
       }}
     >
       {children}

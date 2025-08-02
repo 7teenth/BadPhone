@@ -1,191 +1,177 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import type React from "react"
+
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { useApp } from "../../context/app-context"
+import { Store, User, Wifi, WifiOff, AlertCircle, Loader2 } from "lucide-react"
 
 export default function LoginPage() {
-  const { login, register, isAuthenticated, stores } = useApp()
-  const [tab, setTab] = useState<"login" | "register">("login")
-  const [loginValue, setLoginValue] = useState("")
-  const [password, setPassword] = useState("")
-  const [name, setName] = useState("")
-  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const { login, stores, isOnline, storesLoading } = useApp()
+  const [formData, setFormData] = useState({
+    login: "",
+    password: "",
+    storeId: "",
+  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  useEffect(() => {
-    if (stores.length > 0 && !selectedStoreId) {
-      setSelectedStoreId(stores[0].id)
-    }
-  }, [stores, selectedStoreId])
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
 
-  const handleLogin = async () => {
-    setError(null)
-    setLoading(true)
-
-    if (!selectedStoreId) {
-      setError("Будь ласка, оберіть магазин")
-      setLoading(false)
+    if (!formData.login || !formData.password) {
+      setError("Заповніть всі поля")
       return
     }
 
-    const success = await login(loginValue, password, selectedStoreId)
-
-    setLoading(false)
-
-    if (!success) {
-      setError("Неправильний логін, пароль або магазин")
-    }
-  }
-
-  const handleRegister = async () => {
-    setError(null)
-    setSuccess(null)
-
-    if (!loginValue || !password || !name) {
-      setError("Всі поля обов'язкові")
+    if (!isOnline) {
+      setError("Для входу потрібен інтернет")
       return
     }
 
-    setLoading(true)
-    const success = await register(loginValue, password, name, "seller", null)
-    setLoading(false)
+    setIsLoading(true)
 
-    if (success) {
-      setSuccess("Реєстрація успішна! Тепер можете увійти.")
-      setTab("login")
-    } else {
-      setError("Не вдалося зареєструвати користувача")
+    try {
+      const success = await login(formData.login, formData.password, formData.storeId)
+      if (!success) {
+        setError("Невірний логін або пароль")
+      }
+    } catch (error) {
+      setError("Помилка входу. Спробуйте ще раз")
+    } finally {
+      setIsLoading(false)
     }
-  }
-
-  if (isAuthenticated) {
-    return (
-      <div className="text-center mt-20 text-lg font-semibold">
-        Ви вже авторизовані
-      </div>
-    )
   }
 
   return (
-    <Card className="max-w-md mx-auto mt-20">
-      <CardHeader>
-        <CardTitle>{tab === "login" ? "Вхід" : "Реєстрація"}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Tabs
-          value={tab}
-          onValueChange={(value: string) => {
-            setError(null)
-            setSuccess(null)
-            setTab(value as "login" | "register")
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="login">Вхід</TabsTrigger>
-            <TabsTrigger value="register">Реєстрація</TabsTrigger>
-          </TabsList>
+    <div className="min-h-screen bg-gray-200 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto w-16 h-16 bg-black rounded-full flex items-center justify-center mb-4">
+            <Store className="h-8 w-8 text-white" />
+          </div>
+          <CardTitle className="text-2xl font-bold">BadPhone</CardTitle>
+          <p className="text-gray-600">Система управління продажами</p>
 
-          <TabsContent value="login" className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            {isOnline ? (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <Wifi className="h-3 w-3 mr-1" />
+                Онлайн
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                <WifiOff className="h-3 w-3 mr-1" />
+                Офлайн
+              </Badge>
             )}
-            <div>
-              <Label htmlFor="login">Логін</Label>
-              <Input
-                id="login"
-                type="text"
-                value={loginValue}
-                onChange={(e) => setLoginValue(e.target.value)}
-                autoComplete="username"
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Пароль</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
-            </div>
-            <div>
-              <Label htmlFor="store-select">Оберіть магазин</Label>
-              <select
-                id="store-select"
-                value={selectedStoreId || ""}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="w-full p-2 border rounded"
-              >
-                {stores.map((store) => (
-                  <option key={store.id} value={store.id}>
-                    {store.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button onClick={handleLogin} disabled={loading}>
-              Увійти
-            </Button>
-          </TabsContent>
+          </div>
+        </CardHeader>
 
-          <TabsContent value="register" className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {success && (
-              <Alert variant="success">
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            )}
+        <CardContent>
+          {!isOnline && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center gap-2 text-yellow-800">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm">Немає підключення до інтернету</span>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="login-reg">Логін</Label>
+              <label className="block text-sm font-medium mb-1">Логін</label>
               <Input
-                id="login-reg"
                 type="text"
-                value={loginValue}
-                onChange={(e) => setLoginValue(e.target.value)}
-                autoComplete="username"
+                value={formData.login}
+                onChange={(e) => setFormData({ ...formData, login: e.target.value })}
+                placeholder="Введіть ваш логін"
+                disabled={isLoading || !isOnline}
+                required
               />
             </div>
+
             <div>
-              <Label htmlFor="password-reg">Пароль</Label>
+              <label className="block text-sm font-medium mb-1">Пароль</label>
               <Input
-                id="password-reg"
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Введіть ваш пароль"
+                disabled={isLoading || !isOnline}
+                required
               />
             </div>
+
             <div>
-              <Label htmlFor="name">Ім'я</Label>
-              <Input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="name"
-              />
+              <label className="block text-sm font-medium mb-1">Магазин</label>
+              {storesLoading ? (
+                <div className="flex items-center justify-center p-3 border rounded-md bg-gray-50">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-gray-600">Завантаження магазинів...</span>
+                </div>
+              ) : (
+                <Select
+                  value={formData.storeId}
+                  onValueChange={(value) => setFormData({ ...formData, storeId: value })}
+                  disabled={isLoading || !isOnline}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Виберіть магазин" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores.map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        <div className="flex items-center gap-2">
+                          <Store className="h-4 w-4" />
+                          <span>{store.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-            <Button onClick={handleRegister} disabled={loading}>
-              Зареєструватися
+
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm">{error}</span>
+                </div>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full bg-black hover:bg-gray-800"
+              disabled={isLoading || !isOnline || storesLoading || !formData.storeId}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Вхід...
+                </>
+              ) : (
+                <>
+                  <User className="h-4 w-4 mr-2" />
+                  Увійти
+                </>
+              )}
             </Button>
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+          </form>
+
+          <div className="mt-6 pt-4 border-t text-center">
+            <p className="text-xs text-gray-500">Версія 1.0.0 • © 2024 BadPhone</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
