@@ -24,7 +24,11 @@ import {
   Banknote,
   CreditCard,
   AlertCircle,
+  Percent,
+  X,
 } from "lucide-react"
+import { DiscountModal } from "./discount-modal"
+import { SaleReceipt } from "./sale-receipt"
 
 interface SellPageProps {
   visitId: string
@@ -33,13 +37,19 @@ interface SellPageProps {
 }
 
 export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProps) {
-  const { products, isOnline, removeVisit } = useApp() // Добавляем removeVisit из контекста
+  const { products, isOnline, removeVisit, addSale } = useApp() // Добавляем addSale из контекста
   const [cart, setCart] = useState<SaleItem[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "terminal">("cash")
   const [isProcessing, setIsProcessing] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [discountPercent, setDiscountPercent] = useState(0)
+  const [showReceipt, setShowReceipt] = useState(false)
+  const [lastSaleData, setLastSaleData] = useState<any>(null)
 
   const filteredProducts = products.filter(
     (product) =>
@@ -98,6 +108,11 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
   }
 
   const getTotalAmount = () => {
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    return subtotal - discountAmount
+  }
+
+  const getSubtotal = () => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
   }
 
@@ -106,6 +121,12 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
   }
 
   const handleCompleteSale = async () => {
+    console.log("🛒 handleCompleteSale вызвана!")
+    console.log("📦 Cart items:", cart)
+    console.log("💰 Total amount:", getTotalAmount())
+    console.log("💳 Payment method:", paymentMethod)
+    console.log("🔍 onCreateSale function:", typeof onCreateSale, onCreateSale)
+
     if (cart.length === 0) {
       alert("Додайте товари до кошика")
       return
@@ -116,15 +137,42 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
     }
     setIsProcessing(true)
     try {
-      await onCreateSale(visitId, {
+      console.log("🔄 Вызываем onCreateSale с параметрами:", {
+        visitId,
+        saleData: {
+          items_data: cart,
+          total_amount: getTotalAmount(),
+        },
+      })
+
+      const result = await onCreateSale(visitId, {
         items_data: cart,
         total_amount: getTotalAmount(),
       })
-      alert("Продаж успішно завершено!")
+
+      console.log("✅ onCreateSale завершена успешно!")
+
+      // Подготавливаем данные для чека
+      const receiptData = {
+        receiptNumber: `RCPT-${Date.now()}`,
+        items: cart,
+        totalAmount: getSubtotal(),
+        discountAmount: discountAmount,
+        finalAmount: getTotalAmount(),
+        paymentMethod: paymentMethod,
+        storeName: "BadPhone Store", // Можно получить из контекста
+        sellerName: "Продавець", // Можно получить из контекста
+        timestamp: new Date().toISOString(),
+      }
+
+      setLastSaleData(receiptData)
+      setShowReceipt(true)
+
       setCart([])
-      onBack()
+      setDiscountAmount(0)
+      setDiscountPercent(0)
     } catch (error) {
-      console.error("Error completing sale:", error)
+      console.error("❌ Error completing sale:", error)
       alert("Помилка при завершенні продажу: " + (error as Error).message)
     } finally {
       setIsProcessing(false)
@@ -141,7 +189,6 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
     }
   }
 
-  // ОБНОВЛЕННАЯ функция handleBack с обновлением UI
   const handleBack = async () => {
     if (isDeleting) return
 
@@ -150,8 +197,9 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
         setIsDeleting(true)
         await deleteVisit(visitId)
         console.log("Визит успешно удален")
+        console.log("🔍 Удаляем визит с ID:", visitId)
+        console.log("🔍 Тип visitId:", typeof visitId)
 
-        // ВАЖНО: Обновляем локальное состояние после успешного удаления
         removeVisit(visitId)
       } catch (error) {
         console.error("Помилка при видаленні візиту:", error)
@@ -161,6 +209,23 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
         setIsDeleting(false)
       }
     }
+    onBack()
+  }
+
+  const handleApplyDiscount = (amount: number, percent: number) => {
+    setDiscountAmount(amount)
+    setDiscountPercent(percent)
+    setShowDiscountModal(false)
+  }
+
+  const handleRemoveDiscount = () => {
+    setDiscountAmount(0)
+    setDiscountPercent(0)
+  }
+
+  const handleReceiptClose = () => {
+    setShowReceipt(false)
+    setLastSaleData(null)
     onBack()
   }
 
@@ -209,6 +274,9 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                     className="pl-10"
                   />
                 </div>
+                <Button variant="outline" onClick={() => setShowScanner(true)} className="h-10 w-10 p-0">
+                  <Package className="h-5 w-5" />
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -352,6 +420,15 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                   </SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                variant="outline"
+                onClick={() => setShowDiscountModal(true)}
+                className="w-full mt-2"
+                disabled={cart.length === 0}
+              >
+                <Percent className="h-4 w-4 mr-2" />
+                {discountAmount > 0 ? `Знижка: ${discountPercent.toFixed(1)}%` : "Додати знижку"}
+              </Button>
             </CardContent>
           </Card>
 
@@ -363,6 +440,26 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                   <span>Товарів:</span>
                   <span>{getTotalItems()} шт</span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span>Сума товарів:</span>
+                  <span>{getSubtotal().toLocaleString()} ₴</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-red-600">
+                    <span>Знижка ({discountPercent.toFixed(1)}%):</span>
+                    <div className="flex items-center gap-2">
+                      <span>-{discountAmount.toLocaleString()} ₴</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveDiscount}
+                        className="h-4 w-4 p-0 text-red-600 hover:text-red-800"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <Separator />
                 <div className="flex justify-between text-lg font-bold">
                   <span>До сплати:</span>
@@ -404,6 +501,19 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
             <BarcodeScanner onBarcodeDetected={handleBarcodeDetected} />
           </div>
         </div>
+      )}
+
+      {/* Discount Modal */}
+      <DiscountModal
+        isOpen={showDiscountModal}
+        onClose={() => setShowDiscountModal(false)}
+        originalAmount={getSubtotal()}
+        onApplyDiscount={handleApplyDiscount}
+      />
+
+      {/* Receipt Modal */}
+      {showReceipt && lastSaleData && (
+        <SaleReceipt isOpen={showReceipt} onClose={handleReceiptClose} receiptData={lastSaleData} />
       )}
     </div>
   )

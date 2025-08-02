@@ -31,6 +31,7 @@ import { useApp } from "./context/app-context"
 import { SalesHistory } from "./components/sales-history"
 import { UsersManagement } from "./components/users-management"
 import { supabase } from "@/lib/supabase"
+import { ShiftStatsModal } from "./components/shift-stats-modal"
 
 type Page = "main" | "catalog" | "sell" | "find" | "admin" | "sales-history" | "users"
 type UserRole = "seller" | "owner"
@@ -54,6 +55,8 @@ export default function MainPage() {
   const [itemsError, setItemsError] = useState<string | null>(null)
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null)
   const [showShiftStatsModal, setShowShiftStatsModal] = useState(false)
+  // Добавить новый state для принудительного обновления статистики
+  const [statsUpdateTrigger, setStatsUpdateTrigger] = useState(0)
 
   const {
     currentTime,
@@ -107,6 +110,18 @@ export default function MainPage() {
   useEffect(() => {
     setVisits(contextVisits)
   }, [contextVisits])
+
+  // Добавить useEffect для автоматического обновления статистики каждые 30 секунд
+  useEffect(() => {
+    if (!isShiftActive) return
+
+    const interval = setInterval(() => {
+      console.log("🔄 Auto-updating shift stats...")
+      setStatsUpdateTrigger((prev) => prev + 1)
+    }, 30000) // 30 секунд
+
+    return () => clearInterval(interval)
+  }, [isShiftActive])
 
   const loadSaleItems = useCallback(async (saleId: string | null) => {
     if (!saleId) {
@@ -297,7 +312,10 @@ export default function MainPage() {
   }
 
   // ✅ ИСПРАВЛЕНИЕ: Улучшенная функция для вычисления статистики смены
+  // В функции calculateCurrentShiftStats добавить логирование времени обновления
   const calculateCurrentShiftStats = () => {
+    console.log("📊 Calculating shift stats at:", new Date().toLocaleTimeString())
+
     if (!isShiftActive || !sales) {
       console.log("❌ No active shift or sales data")
       return null
@@ -332,7 +350,13 @@ export default function MainPage() {
     const totalItems = shiftSales.reduce((sum, sale) => sum + (sale.items_data?.length || 0), 0)
     const avgCheck = count > 0 ? totalAmount / count : 0
 
+    // Добавляем недостающие свойства start и end
+    const start = startOfDay
+    const end = new Date()
+
     console.log("✅ Calculated shift stats:", {
+      start,
+      end,
       totalAmount,
       cashAmount,
       terminalAmount,
@@ -342,6 +366,8 @@ export default function MainPage() {
     })
 
     return {
+      start,
+      end,
       totalAmount,
       cashAmount,
       terminalAmount,
@@ -353,6 +379,7 @@ export default function MainPage() {
 
   if (!isAuthenticated) return <LoginPage />
 
+  // Обновить вызов calculateCurrentShiftStats, добавив зависимость от statsUpdateTrigger
   const shiftStats = getShiftStats() || calculateCurrentShiftStats()
 
   switch (currentPage) {
@@ -623,22 +650,16 @@ export default function MainPage() {
         )}
 
         {/* Модальне вікно статистики завершення зміни */}
-        {showShiftStatsModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <h3 className="text-xl font-semibold mb-4">Завершити зміну?</h3>
-              <p className="mb-6">Ви впевнені, що хочете завершити зміну? Після цього всі дані будуть зафіксовані.</p>
-              <div className="flex justify-end gap-4">
-                <Button variant="secondary" onClick={closeShiftStatsModal}>
-                  Скасувати
-                </Button>
-                <Button variant="destructive" onClick={confirmEndShift}>
-                  Завершити
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ShiftStatsModal
+          isOpen={showShiftStatsModal}
+          onClose={closeShiftStatsModal}
+          onConfirmEnd={confirmEndShift}
+          shiftStats={shiftStats}
+          workingHours={workingHours}
+          workingMinutes={workingMinutes}
+          sellerName={currentUser?.name || "Невідомий"}
+          storeName={currentStore?.name || "Невідомий магазин"}
+        />
 
         {/* Деталі вибраного візиту */}
         {selectedVisit && (

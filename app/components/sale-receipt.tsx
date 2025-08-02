@@ -1,139 +1,184 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Printer, Download, Plus, Home } from "lucide-react"
-import type { Sale } from "@/types/sale"
+import { Separator } from "@/components/ui/separator"
+import { Receipt, Printer, Share2, X, Store, User, Clock, Banknote, CreditCard } from "lucide-react"
+import type { SaleItem } from "@/lib/types"
 
 interface SaleReceiptProps {
-  sale: Sale
-  onNewSale: () => void
-  onBack: () => void   // 👈 додай цю пропсу
+  isOpen: boolean
+  onClose: () => void
+  receiptData: {
+    receiptNumber: string
+    items: SaleItem[]
+    totalAmount: number
+    discountAmount?: number
+    finalAmount: number
+    paymentMethod: "cash" | "terminal"
+    storeName: string
+    sellerName: string
+    timestamp: string
+  }
 }
 
+export function SaleReceipt({ isOpen, onClose, receiptData }: SaleReceiptProps) {
+  if (!isOpen) return null
 
-export function SaleReceipt({ sale, onNewSale, onBack }: SaleReceiptProps) {
-  const router = useRouter()
+  const handlePrint = () => {
+    window.print()
+  }
 
-  const handlePrint = () => window.print()
-  const handleDownload = () => console.log("Downloading receipt...")
+  const handleShare = async () => {
+    const receiptText = `
+🧾 ЧЕК №${receiptData.receiptNumber}
+🏪 ${receiptData.storeName}
+👤 Продавець: ${receiptData.sellerName}
+📅 ${new Date(receiptData.timestamp).toLocaleString("uk-UA")}
+
+📦 ТОВАРИ:
+${receiptData.items
+  .map(
+    (item) =>
+      `${item.product_name} (${item.brand} ${item.model})
+${item.quantity} шт × ${item.price.toLocaleString()} ₴ = ${(item.quantity * item.price).toLocaleString()} ₴`,
+  )
+  .join("\n")}
+
+💰 ПІДСУМОК:
+Сума товарів: ${receiptData.totalAmount.toLocaleString()} ₴
+${receiptData.discountAmount ? `Знижка: -${receiptData.discountAmount.toLocaleString()} ₴` : ""}
+ДО СПЛАТИ: ${receiptData.finalAmount.toLocaleString()} ₴
+Спосіб оплати: ${receiptData.paymentMethod === "cash" ? "Готівка" : "Термінал"}
+
+Дякуємо за покупку! 🙏
+    `.trim()
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Чек №${receiptData.receiptNumber}`,
+          text: receiptText,
+        })
+      } catch (error) {
+        console.log("Sharing cancelled")
+      }
+    } else {
+      // Fallback - copy to clipboard
+      try {
+        await navigator.clipboard.writeText(receiptText)
+        alert("Чек скопійовано в буфер обміну!")
+      } catch (error) {
+        console.error("Failed to copy receipt:", error)
+      }
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gray-200">
-      {/* Header */}
-      <header className="bg-black text-white px-6 py-4 flex items-center gap-4 print:hidden">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onBack}
-          className="text-white hover:bg-gray-800"
-          aria-label="На головну"
-        >
-          <Home className="h-6 w-6" />
-        </Button>
-        <h1 className="text-2xl font-bold">Чек продажу</h1>
-        <div className="ml-auto flex gap-2">
-          <Button variant="ghost" onClick={handlePrint} className="text-white hover:bg-gray-800">
-            <Printer className="h-4 w-4 mr-2" />
-            Друк
-          </Button>
-          <Button variant="ghost" onClick={handleDownload} className="text-white hover:bg-gray-800">
-            <Download className="h-4 w-4 mr-2" />
-            Завантажити
-          </Button>
-        </div>
-      </header>
-
-      {/* Receipt */}
-      <div className="p-6 print:p-0">
-        <Card className="max-w-md mx-auto print:shadow-none print:border-none">
-          <CardHeader className="text-center pb-4">
-            <CardTitle className="text-2xl font-bold">BadPhone</CardTitle>
-            <div className="text-sm text-gray-600 space-y-1">
-              <p>Магазин мобільних аксесуарів</p>
-              <p>вул. Хрещатик, 1, Київ</p>
-              <p>Тел: +380 44 123 45 67</p>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-md bg-white shadow-2xl">
+        <CardHeader className="text-center pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-6 w-6 text-green-600" />
+              <CardTitle className="text-xl">Чек продажу</CardTitle>
             </div>
-          </CardHeader>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="text-sm text-gray-600">№ {receiptData.receiptNumber}</div>
+        </CardHeader>
 
-          <CardContent className="space-y-6">
-            {/* Receipt Info */}
-            <div className="border-t border-b border-dashed py-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Чек №:</span>
-                <span className="font-mono">{sale.receiptNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Дата:</span>
-                <span>{sale.date.toLocaleDateString("uk-UA")}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Час:</span>
-                <span>{sale.date.toLocaleTimeString("uk-UA")}</span>
-              </div>
+        <CardContent className="space-y-4">
+          {/* Store and Seller Info */}
+          <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Store className="h-4 w-4 text-gray-600" />
+              <span className="font-medium">{receiptData.storeName}</span>
             </div>
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-gray-600" />
+              <span>Продавець: {receiptData.sellerName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-gray-600" />
+              <span>{new Date(receiptData.timestamp).toLocaleString("uk-UA")}</span>
+            </div>
+          </div>
 
-            {/* Items */}
-            <div className="space-y-3">
-              <h3 className="font-medium">Товари:</h3>
-              {sale.items.map((item, index) => (
-                <div key={item.id} className="space-y-1">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1 pr-2">
-                      <p className="text-sm font-medium line-clamp-2">{item.name}</p>
-                      <p className="text-xs text-gray-600">{item.brand} {item.model}</p>
+          {/* Items */}
+          <div className="space-y-3">
+            <h3 className="font-medium text-sm text-gray-700">Товари:</h3>
+            {receiptData.items.map((item, index) => (
+              <div key={index} className="space-y-1">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{item.product_name}</div>
+                    <div className="text-xs text-gray-600">
+                      {item.brand} {item.model}
                     </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span>{item.cartQuantity} шт × {item.price} ₴</span>
-                    <span className="font-medium">{(item.cartQuantity * item.price).toLocaleString()} ₴</span>
-                  </div>
-                  {index < sale.items.length - 1 && <hr className="border-dashed" />}
+                  <div className="text-sm font-medium ml-2">{(item.quantity * item.price).toLocaleString()} ₴</div>
                 </div>
-              ))}
-            </div>
-
-            {/* Total */}
-            <div className="border-t border-dashed pt-4 space-y-2">
-              <div className="flex justify-between">
-                <span>Кількість товарів:</span>
-                <span>{sale.items.reduce((sum, item) => sum + item.cartQuantity, 0)} шт</span>
+                <div className="text-xs text-gray-500">
+                  {item.quantity} шт × {item.price.toLocaleString()} ₴
+                </div>
               </div>
-              <div className="flex justify-between text-lg font-bold">
-                <span>До сплати:</span>
-                <span>{sale.total.toLocaleString()} ₴</span>
+            ))}
+          </div>
+
+          <Separator />
+
+          {/* Totals */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Сума товарів:</span>
+              <span>{receiptData.totalAmount.toLocaleString()} ₴</span>
+            </div>
+            {receiptData.discountAmount && receiptData.discountAmount > 0 && (
+              <div className="flex justify-between text-sm text-red-600">
+                <span>Знижка:</span>
+                <span>-{receiptData.discountAmount.toLocaleString()} ₴</span>
               </div>
+            )}
+            <Separator />
+            <div className="flex justify-between text-lg font-bold">
+              <span>ДО СПЛАТИ:</span>
+              <span className="text-green-600">{receiptData.finalAmount.toLocaleString()} ₴</span>
             </div>
-
-            {/* Footer */}
-            <div className="text-center text-xs text-gray-500 border-t border-dashed pt-4">
-              <p>Дякуємо за покупку!</p>
-              <p>Гарантія на товар згідно з законодавством України</p>
-              <p>При поверненні товару чек обов'язковий</p>
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+              {receiptData.paymentMethod === "cash" ? (
+                <>
+                  <Banknote className="h-4 w-4" />
+                  <span>Готівка</span>
+                </>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4" />
+                  <span>Термінал</span>
+                </>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Buttons */}
-        <div className="max-w-md mx-auto mt-6 flex gap-4 print:hidden">
-          <Button
-  onClick={onBack} // 👈 виклик колбеку, не router.push
-  variant="outline"
-  className="flex-1 bg-transparent"
->
-  На головну
-</Button>
+          <Separator />
 
-          <Button
-            onClick={onNewSale}
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Новий продаж
-          </Button>
-        </div>
-      </div>
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button onClick={handlePrint} variant="outline" className="flex-1 bg-transparent">
+              <Printer className="h-4 w-4 mr-2" />
+              Друк
+            </Button>
+            <Button onClick={handleShare} variant="outline" className="flex-1 bg-transparent">
+              <Share2 className="h-4 w-4 mr-2" />
+              Поділитися
+            </Button>
+          </div>
+
+          <div className="text-center text-xs text-gray-500 pt-2">Дякуємо за покупку! 🙏</div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

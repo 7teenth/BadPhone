@@ -608,7 +608,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // ✅ ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ функция addSale с детальным логированием
+  // ✅ ИСПРАВЛЕННАЯ функция addSale - НЕ создает визиты автоматически
   const addSale = async (sale: Omit<Sale, "id" | "store_id" | "created_at">) => {
     console.log("🚨 addSale ВЫЗВАНА! Параметры:", sale)
 
@@ -623,18 +623,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const store_id = currentStore?.id || null
-
-      // Получаем количество текущих визитов
-      const { count: visitsCount, error: countError } = await supabase
-        .from("visits")
-        .select("id", { count: "exact", head: true })
-        .eq("store_id", store_id)
-
-      if (countError) {
-        console.error("Error counting visits:", countError)
-      }
-
-      const visitNumber = (visitsCount ?? 0) + 1
 
       // Добавляем продажу
       console.log("💾 Inserting sale into database...")
@@ -739,38 +727,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log("✅ All product updates completed")
       }
 
-      // Добавляем визит
-      if (visitNumber) {
-        console.log("🏪 Adding visit...")
-        const { error: visitInsertError } = await supabase.from("visits").insert([
-          {
-            store_id,
-            seller_id: currentUser.id,
-            title: `Візит ${visitNumber}`,
-            sale_amount: sale.total_amount,
-          },
-        ])
-
-        if (visitInsertError) {
-          console.error("❌ Error adding visit:", visitInsertError)
-        } else {
-          console.log("✅ Visit added successfully")
-          setVisits((prev) => [
-            ...prev,
-            {
-              id: `visit-${Date.now()}`,
-              sale_id: saleData?.id || "uuid-from-sales",
-              store_id: store_id || "",
-              seller_id: currentUser.id,
-              title: `Візит ${visitNumber}`,
-              sale_amount: sale.total_amount,
-              created_at: new Date().toISOString(),
-              seller: currentUser,
-            },
-          ])
-        }
-      }
-
+      // ❌ УБИРАЕМ АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ВИЗИТОВ - это будет делаться в page.tsx
       console.log("🎉 addSale process completed successfully!")
     } catch (error) {
       console.error("❌ addSale failed:", error)
