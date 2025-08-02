@@ -1,330 +1,396 @@
 "use client"
 
-import React, { useState } from "react"
+import type React from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Plus, Trash2, User, UserPlus, AlertCircle, CheckCircle } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ArrowLeft, Plus, Search, User, Trash2, Store, Shield, UserCheck, Filter, AlertCircle } from "lucide-react"
 import { useApp } from "../context/app-context"
+import { DeleteConfirmDialogUser } from "../components/delete-confirm-dialog-user"
+
 
 interface UsersManagementProps {
   onBack: () => void
 }
 
 export function UsersManagement({ onBack }: UsersManagementProps) {
-  const { users, currentUser, currentStore, register, deleteUser, isOnline } = useApp()
-  const [showAddForm, setShowAddForm] = useState(false)
+  const { users, stores, register, deleteUser, isOnline } = useApp()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [storeFilter, setStoreFilter] = useState("all")
+  const [showForm, setShowForm] = useState(false)
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     login: "",
     password: "",
     name: "",
-    // Роль убираем, всегда seller
+    role: "seller" as "owner" | "seller",
+    storeId: "",
   })
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  // Проверяем, есть ли уже владелец
-  const ownerExists = users.some(user => user.role === "owner")
+  // Фильтрация пользователей
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.login.toLowerCase().includes(searchTerm.toLowerCase())
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
-    setSuccess("")
+    const matchesRole = roleFilter === "all" || user.role === roleFilter
+    const matchesStore = storeFilter === "all" || user.store_id === storeFilter
 
-    if (formData.password.length < 3) {
-      setError("Пароль повинен містити мінімум 3 символи")
-      setIsLoading(false)
-      return
-    }
+    return matchesSearch && matchesRole && matchesStore
+  })
 
-    if (!currentStore) {
-      setError("Магазин не знайдено")
-      setIsLoading(false)
-      return
-    }
-
-    try {
-      // Всегда добавляем с ролью seller
-      const success = await register(
-        formData.login.trim(),
-        formData.password,
-        formData.name.trim(),
-        "seller",
-        currentStore.id
-      )
-
-      if (success) {
-        setSuccess("Користувач успішно доданий!")
-        setFormData({
-          login: "",
-          password: "",
-          name: "",
-        })
-        setShowAddForm(false)
-      } else {
-        setError("Користувач з таким логіном вже існує")
-      }
-    } catch (error) {
-      console.error("Помилка при додаванні користувача:", error)
-      setError("Помилка при додаванні користувача")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!deleteConfirm) return
-
-    setIsLoading(true)
-    try {
-      const success = await deleteUser(userId)
-      if (success) {
-        setSuccess("Користувач успішно видалений!")
-        setDeleteConfirm(null)
-      } else {
-        setError("Помилка при видаленні користувача")
-      }
-    } catch (error) {
-      console.error("Помилка при видаленні користувача:", error)
-      setError("Помилка при видаленні користувача")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("uk-UA", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
+  const handleAddUser = () => {
+    setFormData({
+      login: "",
+      password: "",
+      name: "",
+      role: "seller",
+      storeId: "",
     })
+    setShowForm(true)
   }
 
-  if (currentUser?.role !== "owner") {
-    return (
-      <div className="min-h-screen bg-gray-200">
-        <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-          <h1 className="text-2xl font-bold">Управління користувачами</h1>
-        </header>
-        <div className="p-6">
-          <Card className="p-12 text-center">
-            <h3 className="text-xl font-medium text-gray-600 mb-2">Доступ заборонено</h3>
-            <p className="text-gray-500">Тільки власник може управляти користувачами</p>
-          </Card>
-        </div>
-      </div>
-    )
+  const handleDeleteUser = (userId: string) => {
+    setDeleteUserId(userId)
   }
+
+  const confirmDelete = async () => {
+    if (deleteUserId) {
+      const success = await deleteUser(deleteUserId)
+      if (success) {
+        alert("Користувача успішно видалено")
+      } else {
+        alert("Помилка при видаленні користувача")
+      }
+      setDeleteUserId(null)
+    }
+  }
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!formData.login || !formData.password || !formData.name) {
+      alert("Заповніть всі обов'язкові поля")
+      return
+    }
+
+    const success = await register(
+      formData.login,
+      formData.password,
+      formData.name,
+      formData.role,
+      formData.storeId || null,
+    )
+
+    if (success) {
+      alert("Користувача успішно створено")
+      setShowForm(false)
+      setFormData({
+        login: "",
+        password: "",
+        name: "",
+        role: "seller",
+        storeId: "",
+      })
+    } else {
+      alert("Помилка при створенні користувача")
+    }
+  }
+
+  const getUserStats = () => {
+    const total = filteredUsers.length
+    const owners = filteredUsers.filter((u) => u.role === "owner").length
+    const sellers = filteredUsers.filter((u) => u.role === "seller").length
+    const withStores = filteredUsers.filter((u) => u.store_id).length
+
+    return { total, owners, sellers, withStores }
+  }
+
+  const stats = getUserStats()
 
   return (
     <div className="min-h-screen bg-gray-200">
       {/* Header */}
-      <header className="bg-black text-white px-6 py-4 flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
-          <ArrowLeft className="h-6 w-6" />
-        </Button>
-        <h1 className="text-2xl font-bold">Управління користувачами</h1>
-        <Badge className="bg-yellow-600 text-black">Тільки власник</Badge>
-      </header>
-
-      {/* Content */}
-      <div className="p-6 space-y-6">
-        {/* Add User Button */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-medium">Користувачі магазину: {currentStore?.name}</h2>
-          <Button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-black hover:bg-gray-800 text-white"
-            disabled={!isOnline || isLoading}
-          >
+      <header className="bg-black text-white px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+          <h1 className="text-2xl font-bold">Управління користувачами</h1>
+          <Badge variant="secondary" className="bg-gray-700 text-white">
+            {filteredUsers.length} користувачів
+          </Badge>
+        </div>
+        <div className="flex items-center gap-4">
+          <Button onClick={handleAddUser} className="bg-green-600 hover:bg-green-700 text-white" disabled={!isOnline}>
             <Plus className="h-4 w-4 mr-2" />
             Додати користувача
           </Button>
         </div>
+      </header>
 
-        {/* Alerts */}
-        {error && (
-          <Alert variant="destructive" className="flex items-center gap-2">
+      {!isOnline && (
+        <div className="bg-yellow-600 text-white px-6 py-2 text-center text-sm">
+          <div className="flex items-center justify-center gap-2">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+            <span>Режим офлайн - управління користувачами недоступне</span>
+          </div>
+        </div>
+      )}
 
-        {success && (
-          <Alert className="border-green-200 bg-green-50 flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">{success}</AlertDescription>
-          </Alert>
-        )}
+      {/* Content */}
+      <div className="p-6 space-y-6">
+        {/* Filters */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  type="search"
+                  placeholder="Пошук користувачів..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
 
-        {/* Add User Form */}
-        {showAddForm && (
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Роль" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Всі ролі</SelectItem>
+                  <SelectItem value="owner">Власники</SelectItem>
+                  <SelectItem value="seller">Продавці</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Магазин" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Всі магазини</SelectItem>
+                  {stores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm("")
+                  setRoleFilter("all")
+                  setStoreFilter("all")
+                }}
+                className="bg-transparent"
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Скинути
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Statistics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5" />
-                Додати нового користувача
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Ім'я *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Ім'я користувача"
-                      required
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login">Логін *</Label>
-                    <Input
-                      id="login"
-                      value={formData.login}
-                      onChange={(e) => setFormData({ ...formData, login: e.target.value })}
-                      placeholder="Логін для входу"
-                      required
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">Пароль *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="••••••••"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-
-                <div className="flex gap-4">
-                  <Button type="submit" disabled={isLoading} className="bg-green-600 hover:bg-green-700 text-white">
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    {isLoading ? "Додавання..." : "Додати користувача"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setShowAddForm(false)}
-                    className="bg-transparent"
-                    disabled={isLoading}
-                  >
-                    Скасувати
-                  </Button>
-                </div>
-              </form>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+              <div className="text-sm text-gray-600">Всього користувачів</div>
             </CardContent>
           </Card>
-        )}
-
-        {/* Users List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {users.map((user) => (
-            <Card key={user.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center">
-                      <User className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium">{user.name}</h3>
-                      <p className="text-sm text-gray-600">@{user.login}</p>
-                    </div>
-                  </div>
-                  {user.id !== currentUser?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeleteConfirm(user.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      disabled={isLoading}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Роль:</span>
-                    <Badge variant={user.role === "owner" ? "default" : "secondary"}>
-                      {user.role === "owner" ? "Власник" : "Продавець"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Дата реєстрації:</span>
-                    <span className="text-sm">{formatDate(user.created_at)}</span>
-                  </div>
-                  {user.id === currentUser?.id && (
-                    <Badge className="w-full justify-center bg-blue-600 text-white">Це ви</Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">{stats.owners}</div>
+              <div className="text-sm text-gray-600">Власників</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold text-green-600">{stats.sellers}</div>
+              <div className="text-sm text-gray-600">Продавців</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">{stats.withStores}</div>
+              <div className="text-sm text-gray-600">З магазинами</div>
+            </CardContent>
+          </Card>
         </div>
 
-        {users.length === 0 && (
+        {/* Users List */}
+        {filteredUsers.length === 0 ? (
           <Card className="p-12 text-center">
             <User className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-gray-600 mb-2">Користувачі не знайдені</h3>
-            <p className="text-gray-500">Додайте першого користувача для початку роботи</p>
+            <h3 className="text-xl font-medium text-gray-600 mb-2">Користувачі не знайдено</h3>
+            <p className="text-gray-500">Спробуйте змінити критерії пошуку або додайте нового користувача</p>
           </Card>
-        )}
+        ) : (
+          <div className="space-y-4">
+            {filteredUsers.map((user) => {
+              const store = stores.find((s) => s.id === user.store_id)
 
-        {/* Delete Confirmation */}
-        {deleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle className="text-center text-red-600">Підтвердження видалення</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-center">
-                  Ви впевнені, що хочете видалити цього користувача? Цю дію неможливо скасувати!
-                </p>
-                <div className="flex gap-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => setDeleteConfirm(null)}
-                    className="flex-1 bg-transparent"
-                    disabled={isLoading}
-                  >
-                    Скасувати
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => handleDeleteUser(deleteConfirm)}
-                    className="flex-1"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Видалення..." : "Видалити"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              return (
+                <Card key={user.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                          {user.role === "owner" ? (
+                            <Shield className="h-6 w-6 text-purple-600" />
+                          ) : (
+                            <UserCheck className="h-6 w-6 text-green-600" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold">{user.name}</h3>
+                            <Badge
+                              variant={user.role === "owner" ? "default" : "secondary"}
+                              className={user.role === "owner" ? "bg-purple-600" : "bg-green-600"}
+                            >
+                              {user.role === "owner" ? "Власник" : "Продавець"}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <div>Логін: {user.login}</div>
+                            {store && (
+                              <div className="flex items-center gap-1">
+                                <Store className="h-4 w-4" />
+                                <span>Магазин: {store.name}</span>
+                              </div>
+                            )}
+                            <div>Створено: {new Date(user.created_at).toLocaleDateString("uk-UA")}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDeleteUser(user.id)}
+                          disabled={!isOnline}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>
+
+      {/* Add User Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Додати користувача</h3>
+              <Button variant="ghost" onClick={() => setShowForm(false)}>
+                ✕
+              </Button>
+            </div>
+            <form onSubmit={handleFormSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Ім'я *</label>
+                <Input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Введіть ім'я користувача"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Логін *</label>
+                <Input
+                  type="text"
+                  value={formData.login}
+                  onChange={(e) => setFormData({ ...formData, login: e.target.value })}
+                  placeholder="Введіть логін"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Пароль *</label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Введіть пароль"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Роль</label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value: "owner" | "seller") => setFormData({ ...formData, role: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="seller">Продавець</SelectItem>
+                    <SelectItem value="owner">Власник</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Магазин</label>
+                <Select
+                  value={formData.storeId}
+                  onValueChange={(value) => setFormData({ ...formData, storeId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Виберіть магазин" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Без магазину</SelectItem>
+                    {stores.map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-4 pt-4">
+                <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
+                  Скасувати
+                </Button>
+                <Button type="submit" className="bg-green-600 hover:bg-green-700">
+                  Створити
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteUserId && (
+        <DeleteConfirmDialogUser
+          user={users.find((user) => user.id === deleteUserId)?.name || ""}
+          title="Видалити користувача?"
+          message="Ви впевнені, що хочете видалити цього користувача? Цю дію неможливо скасувати."
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteUserId(null)}
+        />
+      )}
     </div>
   )
 }

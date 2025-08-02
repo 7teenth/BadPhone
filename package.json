@@ -4,16 +4,24 @@
   "description": "PWA для продажів",
   "author": "Nikita Karvatskyi",
   "private": true,
+  "main": "electron/main.js",
+  "homepage": "./",
   "scripts": {
     "dev": "next dev",
     "lint": "next lint",
-    "build:web": "next build",
-    "start": "electron .",
-    "build:all": "npm run build:web && electron-builder",
-    "dist": "electron-builder"
+    "export": "next build",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "pack": "npm run export && electron-builder --dir",
+    "dist": "npm run export && electron-builder --publish=never",
+    "build:all": "npm run export && electron-builder",
+    "build": "next build",
+    "start": "next start",
+    "clean": "rimraf dist out"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@prisma/client": "^6.13.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -61,6 +69,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0",
     "vaul": "^0.9.6",
     "zod": "^3.24.1"
   },
@@ -68,40 +77,62 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "electron": "^26.6.10",
+    "concurrently": "^8.2.2",
+    "electron": "^37.2.5",
     "electron-builder": "^24.13.3",
     "postcss": "^8.5",
+    "prisma": "^6.13.0",
+    "rimraf": "^6.0.1",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^7.2.0"
   },
-  "main": "main.js",
   "build": {
-    "appId": "com.yourdomain.badphone",
+    "appId": "com.nikitakarvatskyi.badphone",
     "productName": "BadPhone",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
     "files": [
-      ".next/**/*",
-      "public/**/*",
-      "main.js",
-      "package.json",
-      "next.config.mjs"
+      {
+        "filter": [
+          "out/**/*",
+          "electron/main.js",
+          "package.json"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "electron/icon.ico",
+        "to": "icon.ico"
+      }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "public/favicon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.ico",
+      "publisherName": "Nikita Karvatskyi"
     },
     "nsis": {
-  "oneClick": false,
-  "allowToChangeInstallationDirectory": true,
-  "createDesktopShortcut": true,
-  "createStartMenuShortcut": true,
-  "shortcutName": "BadPhone",
-  "installerIcon": "public/favicon.ico",
-  "uninstallerIcon": "public/favicon.ico",
-  "installerHeaderIcon": "public/favicon.ico",
-  "license": "build/license.txt",
-  "include": "build/installer.nsi",
-  "warningsAsErrors": false
-}
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BadPhone",
+      "installerIcon": "electron/icon.ico",
+      "uninstallerIcon": "electron/icon.ico",
+      "installerHeaderIcon": "electron/icon.ico",
+      "language": "1049",
+      "multiLanguageInstaller": false,
+      "deleteAppDataOnUninstall": true
+    }
   }
 }
-
