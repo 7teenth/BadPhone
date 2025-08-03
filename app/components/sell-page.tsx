@@ -174,13 +174,20 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
   const [showReceipt, setShowReceipt] = useState(false)
   const [lastSaleData, setLastSaleData] = useState<any>(null)
 
-  const filteredProducts = products.filter(
-    (product) =>
+  // Filter products by current store and search term
+  const filteredProducts = products.filter((product) => {
+    // First filter by store - only show products from current user's store
+    const belongsToCurrentStore = currentStore ? product.store_id === currentStore.id : true
+    
+    // Then filter by search term
+    const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.includes(searchTerm)),
-  )
+      (product.barcode && product.barcode.includes(searchTerm))
+    
+    return belongsToCurrentStore && matchesSearch
+  })
 
   const addToCart = useCallback((product: (typeof products)[0]) => {
     if (product.quantity <= 0) {

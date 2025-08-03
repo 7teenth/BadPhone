@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { validate as isUuid } from "uuid"
 import type { SaleItem } from "@/lib/types"
+import { Analytics } from "@vercel/analytics/react"
 import {
   Play,
   Clock,
@@ -125,6 +126,7 @@ export default function MainPage() {
     logout,
     getShiftStats,
     refreshVisits,
+    refreshSales,
     sales,
     addSale,
     loadData, // ✅ Добавляем loadData для обновления всех данных
@@ -154,6 +156,7 @@ export default function MainPage() {
       end: Date
     } | null
     refreshVisits?: () => Promise<void>
+    refreshSales: () => Promise<void>
     sales: any[]
     addSale: (sale: any) => Promise<void>
     loadData: (user: any) => Promise<void> // ✅ Добавляем типизацию
@@ -438,13 +441,19 @@ export default function MainPage() {
     setCurrentPage("main")
     setActiveVisitId(null)
 
-    // ✅ Обновляем только визиты и продажи, не трогаем смену
-    if (currentUser && isOnline && refreshVisits) {
+    // ✅ Обновляем визиты и продажи при возврате на главную
+    if (currentUser && isOnline) {
       try {
-        await refreshVisits()
-        console.log("✅ Visits refreshed successfully")
+        if (refreshVisits) {
+          await refreshVisits()
+          console.log("✅ Visits refreshed successfully")
+        }
+        if (refreshSales) {
+          await refreshSales()
+          console.log("✅ Sales refreshed successfully")
+        }
       } catch (error) {
-        console.error("❌ Error refreshing visits:", error)
+        console.error("❌ Error refreshing data:", error)
       }
     }
   }

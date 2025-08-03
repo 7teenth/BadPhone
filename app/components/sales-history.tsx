@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,7 @@ import {
   TrendingUp,
   BarChart3,
   Info,
+  RefreshCw,
 } from "lucide-react"
 import { useApp } from "../context/app-context"
 
@@ -32,13 +33,14 @@ interface SalesHistoryProps {
 }
 
 export function SalesHistory({ onBack }: SalesHistoryProps) {
-  const { sales, users, stores, currentUser } = useApp()
+  const { sales, users, stores, currentUser, refreshSales, isOnline } = useApp()
   const [searchTerm, setSearchTerm] = useState("")
   const [paymentFilter, setPaymentFilter] = useState("all")
   const [sellerFilter, setSellerFilter] = useState("all")
   const [storeFilter, setStoreFilter] = useState("all")
   const [selectedSale, setSelectedSale] = useState<any>(null)
   const [activeTab, setActiveTab] = useState("list")
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Для продавцов показываем только продажи за сегодня
   const filteredSales = useMemo(() => {
@@ -102,6 +104,43 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
     })
   }
 
+  // Автоматическое обновление данных при монтировании компонента
+  useEffect(() => {
+    const refreshData = async () => {
+      if (refreshSales && isOnline) {
+        console.log("🔄 SalesHistory: Auto-refreshing sales data on mount")
+        try {
+          setIsRefreshing(true)
+          await refreshSales()
+          console.log("✅ SalesHistory: Sales data refreshed successfully")
+        } catch (error) {
+          console.error("❌ SalesHistory: Error refreshing sales data:", error)
+        } finally {
+          setIsRefreshing(false)
+        }
+      }
+    }
+
+    // Only refresh on component mount, not on every dependency change
+    refreshData()
+  }, []) // Empty dependency array to run only on mount
+
+  // Функция для ручного обновления данных
+  const handleRefresh = async () => {
+    if (!refreshSales || !isOnline || isRefreshing) return
+
+    console.log("🔄 SalesHistory: Manual refresh triggered")
+    try {
+      setIsRefreshing(true)
+      await refreshSales()
+      console.log("✅ SalesHistory: Manual refresh completed")
+    } catch (error) {
+      console.error("❌ SalesHistory: Error during manual refresh:", error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-200">
       {/* Header */}
@@ -116,6 +155,15 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
           </Badge>
         </div>
         <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            className="bg-transparent border-white text-white hover:bg-white hover:text-black"
+            onClick={handleRefresh}
+            disabled={!isOnline || isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Оновлення...' : 'Оновити'}
+          </Button>
           <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white hover:text-black">
             <Download className="h-4 w-4 mr-2" />
             Експорт
@@ -207,7 +255,16 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         )}
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {isRefreshing && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center gap-2 text-blue-800">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Оновлення статистики...</span>
+            </div>
+          </div>
+        )}
+        
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 ${isRefreshing ? 'opacity-50 pointer-events-none' : ''}`}>
           <Card>
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
@@ -268,7 +325,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="list" className="space-y-4">
+          <TabsContent value="list" className={`space-y-4 ${isRefreshing ? 'opacity-50 pointer-events-none' : ''}`}>
             {filteredSales.length === 0 ? (
               <Card className="p-12 text-center">
                 <Receipt className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -345,7 +402,7 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="analytics" className="space-y-4">
+          <TabsContent value="analytics" className={`space-y-4 ${isRefreshing ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
