@@ -1,25 +1,17 @@
-export const deleteVisit = async (id: string) => {
-  try {
-    console.log("Отправляем DELETE запрос для ID:", id)
+import { supabase } from "@/lib/supabase"
 
-    const response = await fetch(`/api/visits/${id}`, {
-      // БЕЗ завершающего слеша
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    })
+// ✅ УДАЛЯЕМ функцию deleteVisit, так как теперь используем прямое обращение к Supabase
+// Все операции с визитами теперь идут через Supabase напрямую в компонентах
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(`HTTP ошибка! статус: ${response.status}`)
+// Если нужны другие API функции, добавляем их здесь
+export const api = {
+  // Пример других API функций, если они понадобятся
+  async healthCheck() {
+    try {
+      const { data, error } = await supabase.from("stores").select("id").limit(1)
+      return { success: !error, data }
+    } catch (error) {
+      return { success: false, error }
     }
-
-    const result = await response.json()
-    console.log("Визит успешно удален:", result)
-    return result
-  } catch (error) {
-    console.error("Ошибка при удалении визита:", error)
-    throw error
-  }
+  },
 }

@@ -150,7 +150,6 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     className="pl-10"
                   />
                 </div>
-
                 <Select value={paymentFilter} onValueChange={setPaymentFilter}>
                   <SelectTrigger>
                     <SelectValue placeholder="Спосіб оплати" />
@@ -161,7 +160,6 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     <SelectItem value="terminal">Термінал</SelectItem>
                   </SelectContent>
                 </Select>
-
                 <Select value={sellerFilter} onValueChange={setSellerFilter}>
                   <SelectTrigger>
                     <SelectValue placeholder="Продавець" />
@@ -177,7 +175,6 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                       ))}
                   </SelectContent>
                 </Select>
-
                 <Select value={storeFilter} onValueChange={setStoreFilter}>
                   <SelectTrigger>
                     <SelectValue placeholder="Магазин" />
@@ -191,7 +188,6 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     ))}
                   </SelectContent>
                 </Select>
-
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -287,7 +283,6 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
               <div className="space-y-4">
                 {filteredSales.map((sale) => {
                   const store = stores.find((s) => s.id === sale.store_id)
-
                   return (
                     <Card key={sale.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-6">
@@ -472,7 +467,6 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                       </div>
                     </div>
                   </div>
-
                   <div>
                     <h4 className="font-medium mb-2">Продавець та магазин</h4>
                     <div className="space-y-2 text-sm">

@@ -76,6 +76,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       const storeSales = sales.filter((sale) => sale.store_id === store.id)
       const todaySales = storeSales.filter((sale) => new Date(sale.created_at) >= startOfDay)
       const storeUsers = users.filter((user) => user.store_id === store.id)
+
       const activeUsers = storeUsers.filter((user) => {
         // Проверяем, есть ли продажи пользователя сегодня
         return todaySales.some((sale) => sale.seller_id === user.id)
@@ -132,7 +133,6 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         if (!productStats[productName]) {
           productStats[productName] = { name: productName, quantity: 0, revenue: 0 }
         }
-
         productStats[productName].quantity += quantity
         productStats[productName].revenue += revenue
       })

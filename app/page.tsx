@@ -1,8 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { validate as isUuid } from "uuid"
 import type { SaleItem } from "@/lib/types"
@@ -31,6 +29,55 @@ import { useApp } from "./context/app-context"
 import { SalesHistory } from "./components/sales-history"
 import { UsersManagement } from "./components/users-management"
 import { supabase } from "@/lib/supabase"
+import { ShiftStatsModal } from "./components/shift-stats-modal"
+
+// Простые компоненты вместо shadcn/ui
+const Button = ({
+  children,
+  onClick,
+  variant = "default",
+  size = "default",
+  className = "",
+  disabled = false,
+  title,
+  ...props
+}: any) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    title={title}
+    className={`px-4 py-2 rounded font-medium transition-colors ${
+      variant === "outline"
+        ? "border border-gray-300 bg-white hover:bg-gray-50"
+        : variant === "ghost"
+          ? "bg-transparent hover:bg-gray-100"
+          : variant === "destructive"
+            ? "bg-red-600 text-white hover:bg-red-700"
+            : variant === "secondary"
+              ? "bg-gray-600 text-white hover:bg-gray-700"
+              : variant === "purple"
+                ? "bg-purple-600 text-white hover:bg-purple-700"
+                : "bg-black text-white hover:bg-gray-800"
+    } ${size === "sm" ? "px-2 py-1 text-sm" : ""} ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
+    {...props}
+  >
+    {children}
+  </button>
+)
+
+const Card = ({ children, className = "", onClick }: any) => (
+  <div onClick={onClick} className={`bg-white rounded-lg shadow border ${className}`}>
+    {children}
+  </div>
+)
+
+const CardContent = ({ children, className = "" }: any) => <div className={`p-6 ${className}`}>{children}</div>
+
+const CardHeader = ({ children, className = "" }: any) => <div className={`p-6 pb-0 ${className}`}>{children}</div>
+
+const CardTitle = ({ children, className = "" }: any) => (
+  <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>
+)
 
 type Page = "main" | "catalog" | "sell" | "find" | "admin" | "sales-history" | "users"
 type UserRole = "seller" | "owner"
@@ -54,6 +101,13 @@ export default function MainPage() {
   const [itemsError, setItemsError] = useState<string | null>(null)
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null)
   const [showShiftStatsModal, setShowShiftStatsModal] = useState(false)
+  const [statsUpdateTrigger, setStatsUpdateTrigger] = useState(0)
+
+  // Улучшенная система предотвращения дублирования
+  const [isCreatingVisit, setIsCreatingVisit] = useState(false)
+  const [isCreatingSale, setIsCreatingSale] = useState(false)
+  const lastVisitCreationTime = useRef<number>(0)
+  const lastSaleCreationTime = useRef<number>(0)
 
   const {
     currentTime,
@@ -72,7 +126,9 @@ export default function MainPage() {
     getShiftStats,
     refreshVisits,
     sales,
-    addSale, // ✅ ДОБАВЛЯЕМ addSale из контекста
+    addSale,
+    loadData, // ✅ Добавляем loadData для обновления всех данных
+    currentShift,
   } = useApp() as {
     currentTime: string
     visits: Visit[]
@@ -99,14 +155,27 @@ export default function MainPage() {
     } | null
     refreshVisits?: () => Promise<void>
     sales: any[]
-    addSale: (sale: any) => Promise<void> // ✅ ДОБАВЛЯЕМ тип для addSale
+    addSale: (sale: any) => Promise<void>
+    loadData: (user: any) => Promise<void> // ✅ Добавляем типизацию
+    currentShift: { id: string; start_time: string; end_time: string } | null
   }
 
   const [visits, setVisits] = useState<Visit[]>(contextVisits ?? [])
 
   useEffect(() => {
-    setVisits(contextVisits)
+    setVisits(contextVisits || [])
   }, [contextVisits])
+
+  useEffect(() => {
+    if (!isShiftActive) return
+
+    const interval = setInterval(() => {
+      console.log("🔄 Auto-updating shift stats...")
+      setStatsUpdateTrigger((prev) => prev + 1)
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [isShiftActive])
 
   const loadSaleItems = useCallback(async (saleId: string | null) => {
     if (!saleId) {
@@ -114,23 +183,29 @@ export default function MainPage() {
       setSaleItems([])
       return
     }
+
     setLoadingItems(true)
     setItemsError(null)
+
     try {
       const { data: saleData, error } = await supabase.from("sales").select("items_data").eq("id", saleId).maybeSingle()
+
       if (error || !saleData) {
         setItemsError(error?.message || "Продажу не знайдено")
         setSaleItems([])
         return
       }
+
       const items: SaleItem[] =
         typeof saleData.items_data === "string"
           ? JSON.parse(saleData.items_data)
           : Array.isArray(saleData.items_data)
             ? saleData.items_data
             : []
+
       setSaleItems(items)
-    } catch {
+    } catch (error) {
+      console.error("Error loading sale items:", error)
       setItemsError("Помилка завантаження товарів")
       setSaleItems([])
     } finally {
@@ -162,109 +237,190 @@ export default function MainPage() {
       .padStart(4, "0")}`
   }
 
+  // ✅ ИСПРАВЛЕННАЯ функция создания визита с прямым обращением к Supabase
   const createVisit = async (): Promise<string> => {
-    if (!currentStore || !currentUser) throw new Error("Не вибрано магазин або користувача")
-    // Получаем количество существующих визитов для правильной нумерации
-    const { count: existingVisitsCount } = await supabase
-      .from("visits")
-      .select("id", { count: "exact", head: true })
-      .eq("store_id", currentStore.id)
+    if (!currentStore || !currentUser) {
+      throw new Error("Не вибрано магазин або користувача")
+    }
 
-    const visitNumber = (existingVisitsCount || 0) + 1
-    const visitTitle = `Візит ${visitNumber}`
+    const now = Date.now()
+    if (now - lastVisitCreationTime.current < 2000) {
+      console.log("⚠️ Visit creation blocked - too soon after last creation")
+      throw new Error("Зачекайте перед створенням нового візиту")
+    }
 
-    const { data, error } = await supabase
-      .from("visits")
-      .insert([
-        { title: visitTitle, sale_amount: 0, store_id: currentStore.id, seller_id: currentUser.id, sale_id: null },
-      ])
-      .select()
-      .single()
+    if (isCreatingVisit) {
+      console.log("⚠️ Visit creation already in progress")
+      throw new Error("Візит вже створюється")
+    }
 
-    if (error || !data) throw new Error("Помилка створення візиту: " + (error?.message ?? "Unknown error"))
+    setIsCreatingVisit(true)
+    lastVisitCreationTime.current = now
 
-    if (refreshVisits) await refreshVisits()
-    else setVisits((prev) => [...prev, data])
+    try {
+      console.log("🔄 Creating new visit...")
 
-    return data.id
+      // ✅ Используем прямое обращение к Supabase вместо API роута
+      const { count: existingVisitsCount } = await supabase
+        .from("visits")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", currentStore.id)
+
+      const visitNumber = (existingVisitsCount || 0) + 1
+      const visitTitle = `Візит ${visitNumber}`
+
+      const { data, error } = await supabase
+        .from("visits")
+        .insert([
+          {
+            title: visitTitle,
+            sale_amount: 0,
+            store_id: currentStore.id,
+            seller_id: currentUser.id,
+            sale_id: null,
+          },
+        ])
+        .select()
+        .single()
+
+      if (error || !data) {
+        throw new Error("Помилка створення візиту: " + (error?.message ?? "Unknown error"))
+      }
+
+      console.log("✅ Visit created successfully:", data.id)
+
+      // ✅ Обновляем данные через контекст
+      if (refreshVisits) {
+        await refreshVisits()
+      }
+
+      return data.id
+    } catch (error) {
+      console.error("❌ Error creating visit:", error)
+      throw error
+    } finally {
+      setIsCreatingVisit(false)
+    }
   }
 
-  // ✅ ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ функция createSaleAndLinkVisit
+  // ✅ ИСПРАВЛЕННАЯ функция создания продажи
   async function createSaleAndLinkVisit(
     visitId: string,
     saleData: { items_data: SaleItem[]; total_amount: number },
   ): Promise<{ id: string }> {
-    console.log("🚀 createSaleAndLinkVisit вызвана!")
-    console.log("📦 Sale data:", saleData)
-    console.log("🆔 Visit ID:", visitId)
+    console.log("🚀 createSaleAndLinkVisit called!")
 
-    if (!currentStore || !currentUser) throw new Error("Не вибрано магазин або користувача")
+    if (!currentStore || !currentUser) {
+      throw new Error("Не вибрано магазин або користувача")
+    }
+
+    const now = Date.now()
+    if (now - lastSaleCreationTime.current < 3000) {
+      console.log("⚠️ Sale creation blocked - too soon after last creation")
+      throw new Error("Зачекайте перед створенням нової продажі")
+    }
+
+    if (isCreatingSale) {
+      console.log("⚠️ Sale creation already in progress")
+      throw new Error("Продаж вже створюється")
+    }
+
+    if (!saleData.items_data || saleData.items_data.length === 0) {
+      throw new Error("Немає товарів для продажу")
+    }
+
+    if (!saleData.total_amount || saleData.total_amount <= 0) {
+      throw new Error("Некоректна сума продажу")
+    }
+
+    setIsCreatingSale(true)
+    lastSaleCreationTime.current = now
 
     const receipt_number = generateReceiptNumber()
-
     console.log("🧾 Generated receipt number:", receipt_number)
 
-    // ✅ ИСПОЛЬЗУЕМ addSale из контекста вместо прямого обращения к Supabase
-    console.log("🔄 Вызываем addSale из контекста...")
-    await addSale({
-      receipt_number,
-      total_amount: saleData.total_amount,
-      payment_method: "cash",
-      items_data: saleData.items_data,
-      seller_id: currentUser.id,
-    })
+    try {
+      console.log("🔄 Creating sale...")
 
-    console.log("✅ addSale завершена успешно!")
+      // Создаем продажу через контекст
+      await addSale({
+        receipt_number,
+        total_amount: saleData.total_amount,
+        payment_method: "cash",
+        items_data: saleData.items_data,
+        seller_id: currentUser.id,
+      })
 
-    // Теперь получаем ID созданной продажи для связи с визитом
-    console.log("🔍 Ищем созданную продажу по receipt_number...")
-    const { data: createdSale, error: findError } = await supabase
-      .from("sales")
-      .select("id")
-      .eq("receipt_number", receipt_number)
-      .maybeSingle()
+      console.log("✅ Sale created successfully!")
 
-    if (findError || !createdSale) {
-      console.error("❌ Не удалось найти созданную продажу:", findError)
-      throw new Error("Помилка пошуку створеної продажі: " + (findError?.message ?? "Unknown error"))
+      // Небольшая задержка для обеспечения записи в БД
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Ищем созданную продажу
+      console.log("🔍 Finding created sale...")
+      const { data: createdSale, error: findError } = await supabase
+        .from("sales")
+        .select("id")
+        .eq("receipt_number", receipt_number)
+        .eq("seller_id", currentUser.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (findError || !createdSale) {
+        console.error("❌ Failed to find created sale:", findError)
+        throw new Error("Помилка пошуку створеної продажі: " + (findError?.message ?? "Unknown error"))
+      }
+
+      console.log("✅ Found created sale with ID:", createdSale.id)
+
+      // Связываем визит с продажей
+      console.log("🔗 Linking visit with sale...")
+      const { error: visitError } = await supabase
+        .from("visits")
+        .update({ sale_id: createdSale.id, sale_amount: saleData.total_amount })
+        .eq("id", visitId)
+
+      if (visitError) {
+        console.error("❌ Error updating visit:", visitError)
+        throw new Error("Помилка оновлення візиту: " + visitError.message)
+      }
+
+      console.log("✅ Visit linked with sale successfully!")
+
+      // ✅ Обновляем все данные через контекст
+      if (refreshVisits) {
+        await refreshVisits()
+      }
+
+      console.log("🎉 createSaleAndLinkVisit completed successfully!")
+      return { id: createdSale.id }
+    } catch (error) {
+      console.error("❌ Error in createSaleAndLinkVisit:", error)
+      throw error
+    } finally {
+      setIsCreatingSale(false)
     }
-
-    console.log("✅ Найдена созданная продажа с ID:", createdSale.id)
-
-    // Обновляем визит, связывая его с продажей
-    console.log("🔗 Связываем визит с продажей...")
-    const { error: visitError } = await supabase
-      .from("visits")
-      .update({ sale_id: createdSale.id, sale_amount: saleData.total_amount })
-      .eq("id", visitId)
-
-    if (visitError) {
-      console.error("❌ Ошибка обновления визита:", visitError)
-      throw new Error("Помилка оновлення візиту: " + visitError.message)
-    }
-
-    console.log("✅ Визит успешно связан с продажей!")
-
-    // Обновляем локальное состояние визитов
-    if (refreshVisits) {
-      await refreshVisits()
-    } else {
-      setVisits((prev) =>
-        prev.map((v) => (v.id === visitId ? { ...v, sale_id: createdSale.id, sale_amount: saleData.total_amount } : v)),
-      )
-    }
-
-    console.log("🎉 createSaleAndLinkVisit завершена успешно!")
-    return { id: createdSale.id }
   }
 
   const handleSell = async () => {
-    if (!isShiftActive) startShift()
+    console.log("🛒 handleSell called")
+
+    if (!isShiftActive) {
+      startShift()
+    }
+
+    if (isCreatingVisit) {
+      console.log("⚠️ Visit creation already in progress, ignoring click")
+      return
+    }
+
     try {
       const newVisitId = await createVisit()
       setActiveVisitId(newVisitId)
       setCurrentPage("sell")
     } catch (error) {
+      console.error("❌ Error starting sale:", error)
       alert("Не вдалося створити візит: " + (error as Error).message)
     }
   }
@@ -275,9 +431,22 @@ export default function MainPage() {
   const handleAddProduct = () => setCurrentPage("catalog")
   const handleAdminPanel = () => setCurrentPage("admin")
 
-  const handleBackToMain = () => {
+  // ✅ ИСПРАВЛЕННАЯ функция возврата на главную с обновлением данных
+  const handleBackToMain = async () => {
+    console.log("🏠 Returning to main page, refreshing data...")
+
     setCurrentPage("main")
     setActiveVisitId(null)
+
+    // ✅ Обновляем все данные при возврате на главную
+    if (currentUser && isOnline) {
+      try {
+        await loadData(currentUser)
+        console.log("✅ Data refreshed successfully")
+      } catch (error) {
+        console.error("❌ Error refreshing data:", error)
+      }
+    }
   }
 
   const handleLogout = () => {
@@ -296,52 +465,69 @@ export default function MainPage() {
     setSelectedVisit(null)
   }
 
-  // ✅ ИСПРАВЛЕНИЕ: Улучшенная функция для вычисления статистики смены
   const calculateCurrentShiftStats = () => {
-    if (!isShiftActive || !sales) {
+    console.log("📊 Calculating shift stats at:", new Date().toLocaleTimeString())
+
+    if (!isShiftActive || !sales || !Array.isArray(sales)) {
       console.log("❌ No active shift or sales data")
       return null
     }
 
-    // Фильтруем продажи текущей смены
     const today = new Date()
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
 
     console.log("🔍 Filtering sales for current shift...")
-    console.log("Total sales available:", sales.length)
-    console.log("Current user:", currentUser?.name, "role:", currentUser?.role)
-    console.log("Current store:", currentStore?.name)
-
     const shiftSales = sales.filter((sale) => {
-      const saleDate = new Date(sale.created_at)
-      const isToday = saleDate >= startOfDay
-      const isCurrentUser = currentUser?.role === "seller" ? sale.seller_id === currentUser.id : true
-      const isCurrentStore = currentStore ? sale.store_id === currentStore.id : true
+      if (!sale || !sale.created_at) return false
 
-      return isToday && isCurrentUser && isCurrentStore
+      try {
+        const saleDate = new Date(sale.created_at)
+        // Проверяем, что продажа была сделана во время текущей смены
+        const shiftStart = currentShift ? new Date(currentShift.start_time) : startOfDay
+        const isInShift = saleDate >= shiftStart
+        const isCurrentUser = currentUser?.role === "seller" ? sale.seller_id === currentUser.id : true
+        const isCurrentStore = currentStore ? sale.store_id === currentStore.id : true
+
+        return isInShift && isCurrentUser && isCurrentStore
+      } catch (error) {
+        console.error("Error filtering sale:", error, sale)
+        return false
+      }
     })
 
     console.log("📊 Filtered sales for shift:", shiftSales.length)
+    console.log(
+      "💰 Sales amounts:",
+      shiftSales.map((s) => s.total_amount),
+    )
+    console.log("🕐 Current shift start:", currentShift?.start_time)
 
-    const totalAmount = shiftSales.reduce((sum, sale) => sum + sale.total_amount, 0)
-    const cashAmount = shiftSales.filter((s) => s.payment_method === "cash").reduce((sum, s) => sum + s.total_amount, 0)
+    const totalAmount = shiftSales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0)
+    const cashAmount = shiftSales
+      .filter((s) => s.payment_method === "cash")
+      .reduce((sum, s) => sum + (s.total_amount || 0), 0)
     const terminalAmount = shiftSales
       .filter((s) => s.payment_method === "terminal")
-      .reduce((sum, s) => sum + s.total_amount, 0)
+      .reduce((sum, s) => sum + (s.total_amount || 0), 0)
+
     const count = shiftSales.length
-    const totalItems = shiftSales.reduce((sum, sale) => sum + (sale.items_data?.length || 0), 0)
+    const totalItems = shiftSales.reduce((sum, sale) => {
+      if (!sale.items_data) return sum
+      try {
+        const items = Array.isArray(sale.items_data) ? sale.items_data : JSON.parse(sale.items_data)
+        return sum + (Array.isArray(items) ? items.length : 0)
+      } catch {
+        return sum
+      }
+    }, 0)
+
     const avgCheck = count > 0 ? totalAmount / count : 0
+    const start = startOfDay
+    const end = new Date()
 
-    console.log("✅ Calculated shift stats:", {
-      totalAmount,
-      cashAmount,
-      terminalAmount,
-      count,
-      totalItems,
-      avgCheck,
-    })
-
-    return {
+    const stats = {
+      start,
+      end,
       totalAmount,
       cashAmount,
       terminalAmount,
@@ -349,6 +535,9 @@ export default function MainPage() {
       totalItems,
       avgCheck,
     }
+
+    console.log("✅ Calculated shift stats:", stats)
+    return stats
   }
 
   if (!isAuthenticated) return <LoginPage />
@@ -408,6 +597,7 @@ export default function MainPage() {
             </Button>
           )}
         </div>
+
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             {isOnline ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-red-400" />}
@@ -422,7 +612,7 @@ export default function MainPage() {
             <div className="flex items-center gap-2 text-sm bg-gray-800 px-3 py-1 rounded">
               <Clock className="h-4 w-4" />
               <span>
-                {workingHours} год. {workingMinutes} хв.
+                {workingHours || 0} год. {workingMinutes || 0} хв.
               </span>
             </div>
           )}
@@ -459,18 +649,21 @@ export default function MainPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Button
             onClick={handleSell}
-            className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
-            disabled={!isOnline || !isShiftActive}
+            className="h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
+            disabled={!isOnline || !isShiftActive || isCreatingVisit}
           >
             <div className="text-2xl">💰</div>
-            <span>Продати</span>
-            {isShiftActive && <Badge className="absolute top-2 right-2 bg-green-500">Активно</Badge>}
+            <span>{isCreatingVisit ? "Створення..." : "Продати"}</span>
+            {isShiftActive && !isCreatingVisit && (
+              <Badge className="absolute top-2 right-2 bg-green-500">Активно</Badge>
+            )}
             {!isOnline && <Badge className="absolute top-2 right-2 bg-red-500 text-xs">Офлайн</Badge>}
+            {isCreatingVisit && <Badge className="absolute top-2 right-2 bg-orange-500 text-xs">Створення</Badge>}
           </Button>
 
           <Button
             onClick={handleFindProduct}
-            className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
+            className="h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
           >
             <Search className="h-6 w-6" />
             <span>Знайти товар</span>
@@ -478,7 +671,7 @@ export default function MainPage() {
 
           <Button
             onClick={handleSalesHistory}
-            className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
+            className="h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
           >
             <History className="h-6 w-6" />
             <span>Історія продажів</span>
@@ -488,7 +681,7 @@ export default function MainPage() {
             <>
               <Button
                 onClick={handleAddProduct}
-                className="bg-black hover:bg-gray-800 text-white h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
+                className="h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
                 disabled={!isOnline}
               >
                 <Package className="h-6 w-6" />
@@ -498,7 +691,8 @@ export default function MainPage() {
 
               <Button
                 onClick={handleAdminPanel}
-                className="bg-purple-600 hover:bg-purple-700 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
+                variant="purple"
+                className="h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
                 disabled={!isOnline}
               >
                 <BarChart3 className="h-6 w-6" />
@@ -507,7 +701,7 @@ export default function MainPage() {
 
               <Button
                 onClick={handleUsersManagement}
-                className="bg-blue-600 hover:bg-blue-700 text-white h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
+                className="h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
                 disabled={!isOnline}
               >
                 <Users className="h-6 w-6" />
@@ -544,7 +738,9 @@ export default function MainPage() {
                         </Badge>
                       </div>
                       <div className="text-center py-2">
-                        <div className="text-2xl font-bold text-green-400">{visit.sale_amount.toLocaleString()} ₴</div>
+                        <div className="text-2xl font-bold text-green-400">
+                          {(visit.sale_amount || 0).toLocaleString()} ₴
+                        </div>
                         <div className="text-xs text-gray-400 mt-1">
                           {new Date(visit.created_at).toLocaleTimeString("uk-UA", {
                             hour: "2-digit",
@@ -593,7 +789,7 @@ export default function MainPage() {
                 </div>
                 <div className="text-center p-3 bg-white rounded-lg shadow-sm">
                   <div className="text-2xl font-bold text-orange-600">
-                    {workingHours}г {workingMinutes}хв
+                    {workingHours || 0}г {workingMinutes || 0}хв
                   </div>
                   <div className="text-sm text-gray-600">Час на зміні</div>
                 </div>
@@ -623,22 +819,16 @@ export default function MainPage() {
         )}
 
         {/* Модальне вікно статистики завершення зміни */}
-        {showShiftStatsModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <h3 className="text-xl font-semibold mb-4">Завершити зміну?</h3>
-              <p className="mb-6">Ви впевнені, що хочете завершити зміну? Після цього всі дані будуть зафіксовані.</p>
-              <div className="flex justify-end gap-4">
-                <Button variant="secondary" onClick={closeShiftStatsModal}>
-                  Скасувати
-                </Button>
-                <Button variant="destructive" onClick={confirmEndShift}>
-                  Завершити
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ShiftStatsModal
+          isOpen={showShiftStatsModal}
+          onClose={closeShiftStatsModal}
+          onConfirmEnd={confirmEndShift}
+          shiftStats={shiftStats}
+          workingHours={workingHours}
+          workingMinutes={workingMinutes}
+          sellerName={currentUser?.name || "Невідомий"}
+          storeName={currentStore?.name || "Невідомий магазин"}
+        />
 
         {/* Деталі вибраного візиту */}
         {selectedVisit && (
@@ -661,7 +851,7 @@ export default function MainPage() {
                       {saleItems.map((item, idx) => (
                         <li key={idx} className="py-2 flex justify-between">
                           <span>{item.product_name}</span>
-                          <span>{item.price.toLocaleString()} ₴</span>
+                          <span>{(item.price || 0).toLocaleString()} ₴</span>
                         </li>
                       ))}
                     </ul>

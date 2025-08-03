@@ -1,127 +1,149 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Percent, Minus, X, Calculator } from "lucide-react"
+import { X, Percent, Calculator } from "lucide-react"
 
 interface DiscountModalProps {
   isOpen: boolean
   onClose: () => void
   originalAmount: number
-  onApplyDiscount: (discountAmount: number, discountPercent: number) => void
+  onApplyDiscount: (amount: number, percent: number) => void
 }
+
+const Button = ({
+  children,
+  onClick,
+  variant = "default",
+  className = "",
+  disabled = false,
+  ...props
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+  variant?: "default" | "outline" | "ghost"
+  className?: string
+  disabled?: boolean
+  [key: string]: any
+}) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+      variant === "outline"
+        ? "border border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
+        : variant === "ghost"
+          ? "bg-transparent hover:bg-gray-100 text-gray-700"
+          : "bg-blue-600 text-white hover:bg-blue-700"
+    } ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
+    {...props}
+  >
+    {children}
+  </button>
+)
+
+const Input = ({ className = "", ...props }: { className?: string; [key: string]: any }) => (
+  <input
+    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${className}`}
+    {...props}
+  />
+)
 
 export function DiscountModal({ isOpen, onClose, originalAmount, onApplyDiscount }: DiscountModalProps) {
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent")
   const [discountValue, setDiscountValue] = useState("")
-  const [calculatedDiscount, setCalculatedDiscount] = useState(0)
-  const [finalAmount, setFinalAmount] = useState(originalAmount)
 
   if (!isOpen) return null
 
-  const calculateDiscount = (value: string, type: "percent" | "amount") => {
-    const numValue = Number.parseFloat(value) || 0
+  const handleApply = () => {
+    const value = Number.parseFloat(discountValue)
+    if (isNaN(value) || value <= 0) {
+      alert("Введіть коректне значення знижки")
+      return
+    }
+
     let discountAmount = 0
     let discountPercent = 0
 
-    if (type === "percent") {
-      if (numValue > 100) return // Не больше 100%
-      discountPercent = numValue
-      discountAmount = (originalAmount * numValue) / 100
+    if (discountType === "percent") {
+      if (value > 100) {
+        alert("Знижка не може бути більше 100%")
+        return
+      }
+      discountPercent = value
+      discountAmount = (originalAmount * value) / 100
     } else {
-      if (numValue > originalAmount) return // Не больше суммы товаров
-      discountAmount = numValue
-      discountPercent = (numValue / originalAmount) * 100
+      if (value >= originalAmount) {
+        alert("Знижка не може бути більше або дорівнювати сумі товарів")
+        return
+      }
+      discountAmount = value
+      discountPercent = (value / originalAmount) * 100
     }
 
-    setCalculatedDiscount(discountAmount)
-    setFinalAmount(originalAmount - discountAmount)
-  }
-
-  const handleValueChange = (value: string) => {
-    setDiscountValue(value)
-    calculateDiscount(value, discountType)
-  }
-
-  const handleTypeChange = (type: "percent" | "amount") => {
-    setDiscountType(type)
+    onApplyDiscount(discountAmount, discountPercent)
     setDiscountValue("")
-    setCalculatedDiscount(0)
-    setFinalAmount(originalAmount)
   }
 
-  const handleApply = () => {
-    const discountPercent = (calculatedDiscount / originalAmount) * 100
-    onApplyDiscount(calculatedDiscount, discountPercent)
-    onClose()
-  }
-
-  const handleReset = () => {
-    setDiscountValue("")
-    setCalculatedDiscount(0)
-    setFinalAmount(originalAmount)
-  }
-
-  const quickDiscounts = [5, 10, 15, 20, 25, 30]
+  const quickDiscounts = [5, 10, 15, 20, 25]
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md bg-white shadow-2xl">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calculator className="h-6 w-6 text-blue-600" />
-              <CardTitle>Знижка</CardTitle>
-            </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Додати знижку</h3>
+          <Button variant="ghost" onClick={onClose} className="h-8 w-8 p-0 hover:bg-gray-100 rounded-full">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
 
-        <CardContent className="space-y-4">
+        {/* Content */}
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Original Amount */}
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="text-sm text-gray-600">Сума товарів:</div>
-            <div className="text-xl font-bold">{originalAmount.toLocaleString()} ₴</div>
+          <div className="text-center p-4 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-600 mb-1">Сума товарів:</p>
+            <p className="text-2xl font-bold text-gray-900">{originalAmount.toLocaleString()} ₴</p>
           </div>
 
-          {/* Discount Type Toggle */}
-          <div className="flex gap-2">
-            <Button
-              variant={discountType === "percent" ? "default" : "outline"}
-              onClick={() => handleTypeChange("percent")}
-              className="flex-1"
+          {/* Discount Type Selector */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setDiscountType("percent")}
+              className={`h-12 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors ${
+                discountType === "percent"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
             >
-              <Percent className="h-4 w-4 mr-2" />
-              Відсотки
-            </Button>
-            <Button
-              variant={discountType === "amount" ? "default" : "outline"}
-              onClick={() => handleTypeChange("amount")}
-              className="flex-1"
+              <Percent className="h-4 w-4" />
+              <span>Відсотки</span>
+            </button>
+            <button
+              onClick={() => setDiscountType("amount")}
+              className={`h-12 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors ${
+                discountType === "amount"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
             >
-              <Minus className="h-4 w-4 mr-2" />
-              Сума
-            </Button>
+              <Calculator className="h-4 w-4" />
+              <span>Сума</span>
+            </button>
           </div>
 
-          {/* Quick Discount Buttons (only for percent) */}
+          {/* Quick Discounts (only for percentage) */}
           {discountType === "percent" && (
-            <div className="space-y-2">
-              <Label className="text-sm text-gray-600">Швидкі знижки:</Label>
-              <div className="grid grid-cols-3 gap-2">
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-3">Швидкі знижки:</p>
+              <div className="grid grid-cols-5 gap-2">
                 {quickDiscounts.map((percent) => (
                   <Button
                     key={percent}
                     variant="outline"
-                    size="sm"
-                    onClick={() => handleValueChange(percent.toString())}
-                    className="text-xs"
+                    onClick={() => setDiscountValue(percent.toString())}
+                    className="h-10 text-sm"
                   >
                     {percent}%
                   </Button>
@@ -130,60 +152,85 @@ export function DiscountModal({ isOpen, onClose, originalAmount, onApplyDiscount
             </div>
           )}
 
-          {/* Discount Input */}
-          <div className="space-y-2">
-            <Label htmlFor="discount">{discountType === "percent" ? "Відсоток знижки:" : "Сума знижки:"}</Label>
+          {/* Manual Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {discountType === "percent" ? "Відсоток знижки:" : "Сума знижки:"}
+            </label>
             <div className="relative">
               <Input
-                id="discount"
                 type="number"
                 value={discountValue}
-                onChange={(e) => handleValueChange(e.target.value)}
-                placeholder={discountType === "percent" ? "0" : "0"}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscountValue(e.target.value)}
+                placeholder={discountType === "percent" ? "Введіть відсоток" : "Введіть суму"}
+                className="pr-12"
                 min="0"
                 max={discountType === "percent" ? "100" : originalAmount.toString()}
-                className="pr-8"
+                step={discountType === "percent" ? "0.1" : "1"}
               />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
                 {discountType === "percent" ? "%" : "₴"}
               </div>
             </div>
           </div>
 
-          {/* Calculation Preview */}
-          {calculatedDiscount > 0 && (
-            <div className="bg-blue-50 p-3 rounded-lg space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Сума товарів:</span>
-                <span>{originalAmount.toLocaleString()} ₴</span>
-              </div>
-              <div className="flex justify-between text-sm text-red-600">
-                <span>Знижка ({((calculatedDiscount / originalAmount) * 100).toFixed(1)}%):</span>
-                <span>-{calculatedDiscount.toLocaleString()} ₴</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-lg font-bold text-green-600">
-                <span>До сплати:</span>
-                <span>{finalAmount.toLocaleString()} ₴</span>
+          {/* Preview */}
+          {discountValue && !isNaN(Number.parseFloat(discountValue)) && Number.parseFloat(discountValue) > 0 && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Сума товарів:</span>
+                  <span>{originalAmount.toLocaleString()} ₴</span>
+                </div>
+                <div className="flex justify-between text-red-600">
+                  <span>
+                    Знижка (
+                    {discountType === "percent"
+                      ? `${Number.parseFloat(discountValue)}%`
+                      : `${((Number.parseFloat(discountValue) / originalAmount) * 100).toFixed(1)}%`}
+                    ):
+                  </span>
+                  <span>
+                    -
+                    {discountType === "percent"
+                      ? ((originalAmount * Number.parseFloat(discountValue)) / 100).toLocaleString()
+                      : Number.parseFloat(discountValue).toLocaleString()}{" "}
+                    ₴
+                  </span>
+                </div>
+                <div className="flex justify-between font-semibold text-lg border-t border-blue-300 pt-2">
+                  <span>До сплати:</span>
+                  <span className="text-green-600">
+                    {(
+                      originalAmount -
+                      (discountType === "percent"
+                        ? (originalAmount * Number.parseFloat(discountValue)) / 100
+                        : Number.parseFloat(discountValue))
+                    ).toLocaleString()}{" "}
+                    ₴
+                  </span>
+                </div>
               </div>
             </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleReset} className="flex-1 bg-transparent">
-              Скинути
-            </Button>
-            <Button
-              onClick={handleApply}
-              disabled={calculatedDiscount === 0}
-              className="flex-1 bg-green-600 hover:bg-green-700"
-            >
-              Застосувати
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Footer */}
+        <div className="flex gap-3 p-6 border-t border-gray-200 flex-shrink-0">
+          <Button variant="outline" onClick={onClose} className="flex-1 bg-transparent">
+            Скасувати
+          </Button>
+          <Button
+            onClick={handleApply}
+            disabled={
+              !discountValue || isNaN(Number.parseFloat(discountValue)) || Number.parseFloat(discountValue) <= 0
+            }
+            className="flex-1"
+          >
+            Застосувати
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
