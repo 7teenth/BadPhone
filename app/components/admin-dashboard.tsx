@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,7 @@ import {
   Clock,
 } from "lucide-react"
 import { useApp } from "../context/app-context"
+import { supabase } from "../../lib/supabase"
 
 interface AdminDashboardProps {
   onBack: () => void
@@ -32,6 +33,32 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [selectedPeriod, setSelectedPeriod] = useState("week")
   const [selectedStore, setSelectedStore] = useState("all")
   const [activeTab, setActiveTab] = useState("overview")
+  const [shifts, setShifts] = useState<any[]>([])
+
+  // Load shifts data
+  useEffect(() => {
+    const loadShifts = async () => {
+      try {
+        const { data: shiftsData, error } = await supabase
+          .from("shifts")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          console.error("Error loading shifts:", error)
+          return
+        }
+
+        if (shiftsData) {
+          setShifts(shiftsData)
+        }
+      } catch (error) {
+        console.error("Error loading shifts:", error)
+      }
+    }
+
+    loadShifts()
+  }, [])
 
   // Фильтрация данных по периоду
   const getFilteredData = () => {
@@ -77,14 +104,31 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       const todaySales = storeSales.filter((sale) => new Date(sale.created_at) >= startOfDay)
       const storeUsers = users.filter((user) => user.store_id === store.id)
 
+      // Получаем смены для этого магазина
+      const storeShifts = shifts.filter((shift) => shift.store_id === store.id)
+      
+      // Проверяем активные смены (не завершенные)
+      const activeShifts = storeShifts.filter((shift) => !shift.end_time)
+      
+      // Проверяем завершенные смены за сегодня
+      const todayCompletedShifts = storeShifts.filter((shift) => {
+        if (!shift.end_time) return false
+        const shiftEndDate = new Date(shift.end_time)
+        return shiftEndDate >= startOfDay
+      })
+
       const activeUsers = storeUsers.filter((user) => {
-        // Проверяем, есть ли продажи пользователя сегодня
-        return todaySales.some((sale) => sale.seller_id === user.id)
+        // Проверяем, есть ли активная смена у пользователя
+        return activeShifts.some((shift) => shift.user_id === user.id)
       })
 
       const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.total_amount, 0)
       const lastActivity =
         storeSales.length > 0 ? new Date(Math.max(...storeSales.map((s) => new Date(s.created_at).getTime()))) : null
+
+      // Статус магазина теперь зависит от завершенных смен
+      // Магазин активен, если есть активные смены или завершенные смены сегодня
+      const isActive = activeShifts.length > 0 || todayCompletedShifts.length > 0
 
       return {
         store,
@@ -92,8 +136,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         todayRevenue,
         totalUsers: storeUsers.length,
         activeUsers: activeUsers.length,
+        activeShifts: activeShifts.length,
+        completedShiftsToday: todayCompletedShifts.length,
         lastActivity,
-        isActive: todaySales.length > 0 || activeUsers.length > 0,
+        isActive,
       }
     })
   }
@@ -407,11 +453,17 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                           )}
                           <div>
                             <h3 className="font-medium">{storeStat.store.name}</h3>
-                            <p className="text-sm text-gray-600">{storeStat.isActive ? "Працює" : "Неактивний"}</p>
+                            <p className="text-sm text-gray-600">
+                              {storeStat.activeShifts > 0
+                                ? `Активні зміни: ${storeStat.activeShifts}`
+                                : storeStat.completedShiftsToday > 0
+                                  ? `Завершено змін сьогодні: ${storeStat.completedShiftsToday}`
+                                  : "Немає активних змін"}
+                            </p>
                           </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-4 text-center">
+                      <div className="grid grid-cols-5 gap-4 text-center">
                         <div>
                           <div className="text-lg font-bold text-blue-600">{storeStat.todaySales}</div>
                           <div className="text-xs text-gray-600">Продажі сьогодні</div>
@@ -429,6 +481,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                         <div>
                           <div className="text-lg font-bold text-orange-600">{storeStat.totalUsers}</div>
                           <div className="text-xs text-gray-600">Всього продавців</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-indigo-600">{storeStat.activeShifts}</div>
+                          <div className="text-xs text-gray-600">Активні зміни</div>
                         </div>
                       </div>
                       <div className="text-right">

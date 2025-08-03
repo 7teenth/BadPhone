@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import {
-  Camera,
   Keyboard,
   Zap,
   Calculator,
@@ -36,13 +35,10 @@ interface BarcodeScannerProps {
 }
 
 export function BarcodeScanner({ onBarcodeDetected }: BarcodeScannerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [isScanning, setIsScanning] = useState(false)
   const [manualBarcode, setManualBarcode] = useState("")
   const [activeMode, setActiveMode] = useState<
-    "camera" | "manual" | "profit" | "templates" | "history" | "generator" | "settings"
-  >("camera")
+    "manual" | "profit" | "templates" | "history" | "generator" | "settings"
+  >("manual")
   const [error, setError] = useState<string | null>(null)
 
   // Profit Calculator State
@@ -101,44 +97,14 @@ export function BarcodeScanner({ onBarcodeDetected }: BarcodeScannerProps) {
   ]
 
   useEffect(() => {
-    if (activeMode === "camera" && isScanning) {
-      startCamera()
-    } else {
-      stopCamera()
-    }
-
+    // Camera functionality removed - no longer needed
     return () => {
       stopCamera()
     }
-  }, [activeMode, isScanning])
-
-  const startCamera = async () => {
-    try {
-      setError(null)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      })
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play()
-      }
-    } catch (err) {
-      setError("Не вдалося отримати доступ до камери")
-      console.error("Camera error:", err)
-    }
-  }
+  }, [])
 
   const stopCamera = () => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach((track) => track.stop())
-      videoRef.current.srcObject = null
-    }
+    // Camera functionality removed - no longer needed
   }
 
   const handleManualSubmit = () => {
@@ -193,17 +159,13 @@ export function BarcodeScanner({ onBarcodeDetected }: BarcodeScannerProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Camera className="h-5 w-5" />
+            <Package className="h-5 w-5" />
             Розширений сканер штрих-кодів
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs value={activeMode} onValueChange={(value: any) => setActiveMode(value)}>
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="camera" className="flex items-center gap-1">
-                <Camera className="h-4 w-4" />
-                <span className="hidden sm:inline">Камера</span>
-              </TabsTrigger>
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="manual" className="flex items-center gap-1">
                 <Keyboard className="h-4 w-4" />
                 <span className="hidden sm:inline">Ручний</span>
@@ -230,61 +192,6 @@ export function BarcodeScanner({ onBarcodeDetected }: BarcodeScannerProps) {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="camera" className="space-y-4">
-              <div className="text-center space-y-4">
-                <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "16/9" }}>
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                  <canvas ref={canvasRef} className="hidden" />
-
-                  {!isScanning && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                      <div className="text-center text-white">
-                        <Camera className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                        <p>Натисніть "Почати сканування" для активації камери</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {isScanning && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="border-2 border-green-500 rounded-lg" style={{ width: "60%", height: "30%" }}>
-                        <div className="w-full h-full border-2 border-dashed border-green-300 rounded-lg animate-pulse" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {error && (
-                  <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
-                    <AlertCircle className="h-5 w-5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <div className="flex gap-4 justify-center">
-                  <Button
-                    onClick={() => setIsScanning(!isScanning)}
-                    className={isScanning ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
-                  >
-                    {isScanning ? "Зупинити сканування" : "Почати сканування"}
-                  </Button>
-
-                  {isScanning && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        // Toggle flashlight simulation
-                        setScanSettings((prev) => ({ ...prev, flashlight: !prev.flashlight }))
-                      }}
-                      className={scanSettings.flashlight ? "bg-yellow-100" : ""}
-                    >
-                      <Zap className="h-4 w-4 mr-2" />
-                      {scanSettings.flashlight ? "Вимкнути" : "Увімкнути"} спалах
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </TabsContent>
 
             <TabsContent value="manual" className="space-y-4">
               <div className="space-y-4">

@@ -127,6 +127,7 @@ interface AppContextType extends AppState {
   } | null
   currentStoreId: string | null
   refreshVisits?: () => Promise<void>
+  refreshSales: () => Promise<void>
   removeVisit: (visitId: string) => void
   storesLoading: boolean
 }
@@ -164,22 +165,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isOnline) return
     let cancelled = false
+    let retryCount = 0
+    const maxRetries = 3
 
     const loadStores = async () => {
       try {
         setStoresLoading(true)
+        console.log("🏪 Loading stores, attempt:", retryCount + 1)
+        
         const { data: storesData, error } = await supabase.from("stores").select("*")
 
         if (error) {
           console.error("Error loading stores:", error)
-          return
-        }
-
-        if (!cancelled && storesData) {
+          
+          // Retry logic for store loading
+          if (retryCount < maxRetries && !cancelled) {
+            retryCount++
+            console.log(`🔄 Retrying store loading (${retryCount}/${maxRetries})...`)
+            setTimeout(() => {
+              if (!cancelled) {
+                loadStores()
+              }
+            }, 1000 * retryCount) // Exponential backoff
+            return
+          }
+        } else if (!cancelled && storesData) {
+          console.log("✅ Stores loaded successfully:", storesData.length)
           setStores(storesData)
         }
       } catch (error) {
         console.error("Error loading stores:", error)
+        
+        // Retry on network errors
+        if (retryCount < maxRetries && !cancelled) {
+          retryCount++
+          console.log(`🔄 Retrying store loading after error (${retryCount}/${maxRetries})...`)
+          setTimeout(() => {
+            if (!cancelled) {
+              loadStores()
+            }
+          }, 1000 * retryCount)
+          return
+        }
       } finally {
         if (!cancelled) {
           setStoresLoading(false)
@@ -547,9 +574,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await supabase.from("visits").delete().eq("store_id", currentStore.id)
       }
 
-      setCurrentShift({ ...currentShift, end_time: now })
+      // ✅ Properly clear the current shift to allow starting a new one
+      setCurrentShift(null)
       setTotalSalesAmount(0)
       setVisits([])
+      
+      console.log("✅ Shift ended successfully, ready for new shift")
     } catch (err) {
       console.error("Failed to end shift:", err)
     }
@@ -758,6 +788,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log("✅ All product updates completed")
       }
 
+      // ✅ Автоматически обновляем данные о продажах после создания новой продажи
+      console.log("🔄 Auto-refreshing sales data after sale creation...")
+      try {
+        await refreshSales()
+        console.log("✅ Sales data auto-refreshed successfully")
+      } catch (refreshError) {
+        console.warn("⚠️ Failed to auto-refresh sales data:", refreshError)
+        // Не бросаем ошибку, так как продажа уже создана успешно
+      }
+
       console.log("🎉 addSale process completed successfully!")
     } catch (error) {
       console.error("❌ addSale failed:", error)
@@ -949,6 +989,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const refreshSales = async () => {
+    if (!isOnline || !currentUser) return
+
+    try {
+      console.log("🔄 Refreshing sales data...")
+      
+      if (currentUser.role === "owner") {
+        console.log("📊 Loading ALL sales data for owner")
+        const { data: salesData } = await supabase.from("sales").select("*").order("created_at", { ascending: false })
+        console.log("📈 All sales data loaded:", salesData?.length || 0, "sales")
+
+        if (salesData) {
+          const salesWithSellers = salesData.map((sale) => {
+            const seller = users.find((u) => u.id === sale.seller_id)
+            return { ...sale, seller }
+          })
+          setSales(salesWithSellers)
+          
+          // Пересчитываем общую сумму продаж
+          const total = salesWithSellers.reduce((sum, sale) => sum + sale.total_amount, 0)
+          setTotalSalesAmount(total)
+          console.log("✅ Sales data refreshed, total amount:", total)
+        }
+      } else if (currentUser.store_id) {
+        console.log("🏪 Loading store sales data for seller, store_id:", currentUser.store_id)
+
+        const today = new Date()
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+
+        const { data: salesData } = await supabase
+          .from("sales")
+          .select("*")
+          .eq("store_id", currentUser.store_id)
+          .eq("seller_id", currentUser.id)
+          .gte("created_at", startOfDay)
+          .order("created_at", { ascending: false })
+
+        if (salesData) {
+          const salesWithSellers = salesData.map((sale) => {
+            const seller = users.find((u) => u.id === sale.seller_id)
+            return { ...sale, seller }
+          })
+          setSales(salesWithSellers)
+          
+          // Пересчитываем общую сумму продаж
+          const total = salesWithSellers.reduce((sum, sale) => sum + sale.total_amount, 0)
+          setTotalSalesAmount(total)
+          console.log("✅ Seller sales data refreshed, total amount:", total)
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error refreshing sales:", error)
+    }
+  }
+
   const isShiftActive = Boolean(currentShift && !currentShift.end_time)
 
   const getHourlyEarnings = () => {
@@ -1012,6 +1107,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getShiftStats,
         loadData,
         refreshVisits,
+        refreshSales,
         removeVisit,
         storesLoading,
       }}
