@@ -1,23 +1,101 @@
 "use client"
-
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Printer, Download, Plus, Home } from "lucide-react"
-import type { Sale } from "@/types/sale"
+
+interface SaleItem {
+  id: string
+  name: string
+  brand?: string
+  model?: string
+  price: number
+  cartQuantity: number
+}
+
+interface Sale {
+  id: string
+  receiptNumber: string
+  date: Date | string
+  items: SaleItem[]
+  total: number
+  subtotal?: number
+  discountAmount?: number
+  paymentMethod?: string
+}
 
 interface SaleReceiptProps {
   sale: Sale
   onNewSale: () => void
-  onBack: () => void   // 👈 додай цю пропсу
+  onBack: () => void
 }
 
-
 export function SaleReceipt({ sale, onNewSale, onBack }: SaleReceiptProps) {
-  const router = useRouter()
+  const handlePrint = () => {
+    if (window.print) {
+      window.print()
+    } else {
+      alert("Функція друку не підтримується вашим браузером")
+    }
+  }
+  const handleDownload = () => {
+    try {
+      // Создаем простой текстовый чек для загрузки
+      const receiptText = `
+BADPHONE
+Магазин мобільних аксесуарів
+вул. Хрещатик, 1, Київ
+Тел: +380 44 123 45 67
 
-  const handlePrint = () => window.print()
-  const handleDownload = () => console.log("Downloading receipt...")
+Чек №: ${sale.receiptNumber}
+Дата: ${saleDate ? saleDate.toLocaleDateString("uk-UA") : "–"}
+Час: ${saleDate ? saleDate.toLocaleTimeString("uk-UA") : "–"}
+
+ТОВАРИ:
+${
+  sale.items
+    ? sale.items
+        .map(
+          (item) =>
+            `${item.name || "Невідомий товар"}
+${item.brand || ""} ${item.model || ""}
+${item.cartQuantity || 0} шт × ${(item.price || 0).toLocaleString()} ₴ = ${((item.cartQuantity || 0) * (item.price || 0)).toLocaleString()} ₴`,
+        )
+        .join("\n\n")
+    : "Товари відсутні"
+}
+
+Кількість товарів: ${sale.items ? sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0), 0) : 0} шт
+${sale.subtotal ? `Підсума: ${sale.subtotal.toLocaleString()} ₴` : ""}
+${sale.discountAmount && sale.discountAmount > 0 ? `Знижка: -${sale.discountAmount.toLocaleString()} ₴` : ""}
+До сплати: ${safeTotal.toLocaleString()} ₴
+${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
+
+Дякуємо за покупку!
+Гарантія на товар згідно з законодавством України
+При поверненні товару чек обов'язковий
+      `.trim()
+
+      const blob = new Blob([receiptText], { type: "text/plain;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `receipt-${sale.receiptNumber || "unknown"}.txt`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Error downloading receipt:", error)
+      alert("Помилка при завантаженні чеку")
+    }
+  }
+
+  // Безопасно получаем дату (преобразуем, если нужно)
+  const saleDate = sale.date ? new Date(sale.date) : null
+
+  // Safe total calculation with fallback
+  const safeTotal =
+    sale.total || sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0) * (item.price || 0), 0)
 
   return (
     <div className="min-h-screen bg-gray-200">
@@ -66,44 +144,72 @@ export function SaleReceipt({ sale, onNewSale, onBack }: SaleReceiptProps) {
               </div>
               <div className="flex justify-between">
                 <span>Дата:</span>
-                <span>{sale.date.toLocaleDateString("uk-UA")}</span>
+                <span>{saleDate ? saleDate.toLocaleDateString("uk-UA") : "–"}</span>
               </div>
               <div className="flex justify-between">
                 <span>Час:</span>
-                <span>{sale.date.toLocaleTimeString("uk-UA")}</span>
+                <span>{saleDate ? saleDate.toLocaleTimeString("uk-UA") : "–"}</span>
               </div>
             </div>
 
             {/* Items */}
             <div className="space-y-3">
               <h3 className="font-medium">Товари:</h3>
-              {sale.items.map((item, index) => (
-                <div key={item.id} className="space-y-1">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1 pr-2">
-                      <p className="text-sm font-medium line-clamp-2">{item.name}</p>
-                      <p className="text-xs text-gray-600">{item.brand} {item.model}</p>
+              {sale.items && sale.items.length > 0 ? (
+                sale.items.map((item, index) => (
+                  <div key={item.id || index} className="space-y-1">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 pr-2">
+                        <p className="text-sm font-medium line-clamp-2">{item.name || "Невідомий товар"}</p>
+                        <p className="text-xs text-gray-600">
+                          {item.brand || ""} {item.model || ""}
+                        </p>
+                      </div>
                     </div>
+                    <div className="flex justify-between text-sm">
+                      <span>
+                        {item.cartQuantity || 0} шт × {(item.price || 0).toLocaleString()} ₴
+                      </span>
+                      <span className="font-medium">
+                        {((item.cartQuantity || 0) * (item.price || 0)).toLocaleString()} ₴
+                      </span>
+                    </div>
+                    {index < sale.items.length - 1 && <hr className="border-dashed" />}
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span>{item.cartQuantity} шт × {item.price} ₴</span>
-                    <span className="font-medium">{(item.cartQuantity * item.price).toLocaleString()} ₴</span>
-                  </div>
-                  {index < sale.items.length - 1 && <hr className="border-dashed" />}
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">Товари відсутні</p>
+              )}
             </div>
 
             {/* Total */}
             <div className="border-t border-dashed pt-4 space-y-2">
               <div className="flex justify-between">
                 <span>Кількість товарів:</span>
-                <span>{sale.items.reduce((sum, item) => sum + item.cartQuantity, 0)} шт</span>
+                <span>{sale.items ? sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0), 0) : 0} шт</span>
               </div>
+              {sale.subtotal && (
+                <div className="flex justify-between">
+                  <span>Підсума:</span>
+                  <span>{sale.subtotal.toLocaleString()} ₴</span>
+                </div>
+              )}
+              {sale.discountAmount && sale.discountAmount > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Знижка:</span>
+                  <span>-{sale.discountAmount.toLocaleString()} ₴</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold">
                 <span>До сплати:</span>
-                <span>{sale.total.toLocaleString()} ₴</span>
+                <span>{safeTotal.toLocaleString()} ₴</span>
               </div>
+              {sale.paymentMethod && (
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Спосіб оплати:</span>
+                  <span>{sale.paymentMethod}</span>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -117,20 +223,8 @@ export function SaleReceipt({ sale, onNewSale, onBack }: SaleReceiptProps) {
 
         {/* Buttons */}
         <div className="max-w-md mx-auto mt-6 flex gap-4 print:hidden">
-          <Button
-  onClick={onBack} // 👈 виклик колбеку, не router.push
-  variant="outline"
-  className="flex-1 bg-transparent"
->
-  На головну
-</Button>
-
-          <Button
-            onClick={onNewSale}
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Новий продаж
+          <Button onClick={onBack} variant="outline" className="flex-1 bg-transparent">
+            На головну
           </Button>
         </div>
       </div>
