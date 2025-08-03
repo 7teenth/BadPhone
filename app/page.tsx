@@ -433,18 +433,18 @@ export default function MainPage() {
 
   // ✅ ИСПРАВЛЕННАЯ функция возврата на главную с обновлением данных
   const handleBackToMain = async () => {
-    console.log("🏠 Returning to main page, refreshing data...")
+    console.log("🏠 Returning to main page...")
 
     setCurrentPage("main")
     setActiveVisitId(null)
 
-    // ✅ Обновляем все данные при возврате на главную
-    if (currentUser && isOnline) {
+    // ✅ Обновляем только визиты и продажи, не трогаем смену
+    if (currentUser && isOnline && refreshVisits) {
       try {
-        await loadData(currentUser)
-        console.log("✅ Data refreshed successfully")
+        await refreshVisits()
+        console.log("✅ Visits refreshed successfully")
       } catch (error) {
-        console.error("❌ Error refreshing data:", error)
+        console.error("❌ Error refreshing visits:", error)
       }
     }
   }
@@ -865,5 +865,3 @@ export default function MainPage() {
     </div>
   )
 }
-
-//

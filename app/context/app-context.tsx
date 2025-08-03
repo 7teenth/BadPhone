@@ -282,14 +282,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (user) {
-        const { data: shiftData } = await supabase
+        // Загружаем данные о смене, но сохраняем текущее состояние если запрос неудачен
+        const { data: shiftData, error: shiftError } = await supabase
           .from("shifts")
           .select("*")
           .eq("user_id", user.id)
           .is("end_time", null)
           .maybeSingle()
 
-        setCurrentShift(shiftData || null)
+        // Обновляем смену только если получили данные или явную ошибку "не найдено"
+        if (!shiftError) {
+          setCurrentShift(shiftData || null)
+        } else if (shiftError.code === "PGRST116") {
+          // Код PGRST116 означает "no rows returned" - смена действительно не найдена
+          setCurrentShift(null)
+        } else {
+          // При других ошибках сохраняем текущее состояние смены
+          console.warn("Error loading shift data, keeping current state:", shiftError)
+        }
 
         if (user.role === "owner") {
           console.log("📊 Loading ALL data for owner")
