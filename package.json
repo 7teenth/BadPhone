@@ -1,6 +1,6 @@
 {
   "name": "bad-phone",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PWA для продажів",
   "author": "Nikita Karvatskyi",
   "private": true,
@@ -67,6 +67,7 @@
     "react-hook-form": "^7.54.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "serve-handler": "^6.1.6",
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
@@ -79,7 +80,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "concurrently": "^8.2.2",
-    "electron": "^37.2.5",
+    "electron": "^32.2.7",
     "electron-builder": "^24.13.3",
     "postcss": "^8.5",
     "prisma": "^6.13.0",
@@ -96,13 +97,9 @@
       "buildResources": "build"
     },
     "files": [
-      {
-        "filter": [
-          "out/**/*",
-          "electron/main.js",
-          "package.json"
-        ]
-      }
+      "out/**/*",
+      "electron/main.js",
+      "package.json"
     ],
     "extraResources": [
       {

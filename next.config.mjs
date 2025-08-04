@@ -1,7 +1,14 @@
 /** @type {import('next').NextConfig} */
+
+const isStatic = process.env.STATIC_EXPORT === 'true';
+
 const nextConfig = {
-  // Включаем статический экспорт только для production build
-  ...(process.env.STATIC_EXPORT === "true" && { output: "export" }),
+  output: isStatic ? 'export' : undefined,
+  distDir: isStatic ? 'out' : '.next',
+  trailingSlash: true,
+  assetPrefix: isStatic ? '/' : undefined, // относительные пути для Electron
+  basePath: isStatic ? '' : undefined,      // не нужен basePath, если не меняешь поддиректорию
+
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -11,10 +18,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  assetPrefix: process.env.NODE_ENV === "production" ? "/" : "",
-  experimental: {
-    esmExternals: false,
-  },
-}
+};
 
-export default nextConfig
+export default nextConfig;

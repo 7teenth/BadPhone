@@ -1,0 +1,24 @@
+; Исправление предупреждений языка
+!define MUI_WELCOMEPAGE_TITLE "Ласкаво просимо до встановлення BadPhone"
+!define MUI_WELCOMEPAGE_TEXT "Цей майстер допоможе вам встановити BadPhone."
+
+!define MUI_DIRECTORYPAGE_TEXT_TOP "Виберіть папку для встановлення BadPhone."
+!define MUI_INSTFILESPAGE_HEADER_TEXT "Встановлення"
+!define MUI_FINISHPAGE_TITLE "Встановлення завершено"
+
+; Функция для создания деинсталлятора и записи в реестр
+!macro customInstall
+  ; Создание деинсталлятора
+  WriteUninstaller "$INSTDIR\Uninstall.exe"
+  
+  ; Добавление в список программ
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\BadPhone" "DisplayName" "BadPhone"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\BadPhone" "UninstallString" "$INSTDIR\Uninstall.exe"
+!macroend
+
+Section "Uninstall"
+  RMDir /r "$INSTDIR"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\BadPhone"
+  Delete "$DESKTOP\BadPhone.lnk"
+  Delete "$SMPROGRAMS\BadPhone.lnk"
+SectionEnd

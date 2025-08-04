@@ -1,14 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+export const dynamic = "force-static"
+export const revalidate = 0
+
 console.log("Route.ts загружен, NODE_ENV:", process.env.NODE_ENV)
 console.log("STATIC_EXPORT:", process.env.STATIC_EXPORT)
 
-// Создаем Supabase клиент
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-// GET для тестирования
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (process.env.STATIC_EXPORT === "true") {
+    return new Response("API не доступен в static режиме", { status: 404 })
+  }
+
   try {
     const { id } = await params
     console.log("GET запрос для ID:", id)
@@ -23,21 +31,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// DELETE обработчик - упрощенная версия
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (process.env.STATIC_EXPORT === "true") {
+    return new Response("API не доступен в static режиме", { status: 404 })
+  }
+
   try {
     const { id } = await params
     console.log("DELETE запрос получен для ID:", id)
 
-    // Проверяем формат UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     if (!uuidRegex.test(id)) {
       console.log("Неверный формат ID:", id)
       return NextResponse.json({ error: "Неверный формат ID" }, { status: 400 })
     }
 
-    // Сразу пытаемся удалить
-    console.log("Пытаемся удалить визит с ID:", id)
     const { data, error } = await supabase.from("visits").delete().eq("id", id).select()
 
     if (error) {
@@ -45,7 +53,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: `Ошибка Supabase: ${error.message}` }, { status: 500 })
     }
 
-    // Если ничего не удалено, значит записи не было
     if (!data || data.length === 0) {
       console.log("Запись не найдена для удаления")
       return NextResponse.json({ error: "Визит не найден" }, { status: 404 })
@@ -65,7 +72,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         error: "Внутренняя ошибка сервера",
         details: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }
