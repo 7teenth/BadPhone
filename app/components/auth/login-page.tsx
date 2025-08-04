@@ -168,7 +168,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 pt-4 border-t text-center">
-            <p className="text-xs text-gray-500">Версія 1.0.0 • © 2024 BadPhone</p>
+            <p className="text-xs text-gray-500">Версія 1.0.1 • © 2024 BadPhone</p>
           </div>
         </CardContent>
       </Card>

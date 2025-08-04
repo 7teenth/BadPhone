@@ -130,7 +130,7 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
             <CardTitle className="text-2xl font-bold">BadPhone</CardTitle>
             <div className="text-sm text-gray-600 space-y-1">
               <p>Магазин мобільних аксесуарів</p>
-              <p>вул. Хрещатик, 1, Київ</p>
+              <p>вул. 23 серпня, 33-А, Харків</p>
               <p>Тел: +380 44 123 45 67</p>
             </div>
           </CardHeader>
