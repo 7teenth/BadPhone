@@ -419,7 +419,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 pt-4 border-t border-purple-700 text-center text-gray-300">
-            Версія 1.0.2 • © 2025 BadPhone
+            Версія 1.0.3 • © 2025 BadPhone
           </div>
         </CardContent>
       </Card>
