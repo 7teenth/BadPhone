@@ -1,7 +1,7 @@
-{
+﻿{
     "name":  "bad-phone",
     "version":  "1.0.2",
-    "description":  "PWA Р Т‘Р В»РЎРЏ Р С—РЎР‚Р С•Р Т‘Р В°Р В¶РЎвЂ“Р Р†",
+    "description":  "PWA Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР В РўвЂР В Р’В°Р В Р’В¶Р РЋРІР‚вЂњР В Р вЂ ",
     "author":  "Nikita Karvatskyi",
     "private":  true,
     "main":  "electron/main.js",
