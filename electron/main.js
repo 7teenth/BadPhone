@@ -1,24 +1,22 @@
-const { app, BrowserWindow, Menu, dialog, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, shell, globalShortcut } = require("electron");
 const path = require("path");
 const http = require("http");
 const handler = require("serve-handler");
-
 const isDev = process.env.NODE_ENV === "development";
+const { autoUpdater } = require("electron-updater");
 
 let server = null;
 let PORT = 3001;
-
 let mainWindow;
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    fullscreen: false,          // ❌ не fullscreen
-  frame: true,                // ✅ оставить верхнюю панель окна с кнопками
-  autoHideMenuBar: true,   
+    frame: true,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -30,28 +28,28 @@ function createWindow() {
     titleBarStyle: "default",
   });
 
-  mainWindow.maximize(); 
+  mainWindow.maximize();
 
+  let startUrl;
   if (isDev) {
-    mainWindow.loadURL("http://localhost:3000");
-    mainWindow.webContents.openDevTools();
+    startUrl = "http://localhost:3000";
   } else {
-    startLocalServer()
-      .then(() => {
-        mainWindow.loadURL(`http://localhost:${PORT}`);
-      })
-      .catch((err) => {
-        console.error("Failed to start local server:", err);
-        dialog.showErrorBox("Ошибка", "Не удалось запустить локальный сервер");
-      });
+    await startLocalServer();
+    startUrl = `http://localhost:${PORT}`;
   }
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+  mainWindow.loadURL(startUrl);
 
-    if (isDev) {
-      mainWindow.webContents.openDevTools();
-    }
+  mainWindow.once("ready-to-show", () => mainWindow.show());
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  // DevTools для prod через F12
+  globalShortcut.register("F12", () => {
+    mainWindow.webContents.toggleDevTools({ mode: "detach" });
   });
 
   mainWindow.on("close", (event) => {
@@ -65,7 +63,6 @@ function createWindow() {
         defaultId: 0,
         cancelId: 1,
       });
-
       if (choice === 0) {
         app.isQuiting = true;
         app.quit();
@@ -73,20 +70,18 @@ function createWindow() {
     }
   });
 
+  if (!isDev) {
+    initAutoUpdater();
+  }
+
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription) => {
     console.error("Failed to load:", errorCode, errorDescription);
-
     if (!isDev) {
       dialog.showErrorBox(
         "Ошибка загрузки",
         `Не удалось загрузить приложение.\nКод ошибки: ${errorCode}\nОписание: ${errorDescription}`
       );
     }
-  });
-
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
   });
 }
 
@@ -95,73 +90,17 @@ function createMenu() {
     {
       label: "Файл",
       submenu: [
-        {
-          label: "Обновить",
-          accelerator: "F5",
-          click: () => {
-            mainWindow.reload();
-          },
-        },
-        {
-          label: "Принудительное обновление",
-          accelerator: "Ctrl+F5",
-          click: () => {
-            mainWindow.webContents.reloadIgnoringCache();
-          },
-        },
+        { label: "Обновить", accelerator: "F5", click: () => mainWindow.reload() },
+        { label: "Принудительное обновление", accelerator: "Ctrl+F5", click: () => mainWindow.webContents.reloadIgnoringCache() },
         { type: "separator" },
-        {
-          label: "Выход",
-          accelerator: process.platform === "darwin" ? "Cmd+Q" : "Ctrl+Q",
-          click: () => {
-            app.isQuiting = true;
-            app.quit();
-          },
-        },
+        { label: "Выход", accelerator: process.platform === "darwin" ? "Cmd+Q" : "Ctrl+Q", click: () => { app.isQuiting = true; app.quit(); } },
       ],
     },
     {
       label: "Вид",
       submenu: [
-        {
-          label: "Увеличить",
-          accelerator: "Ctrl+Plus",
-          click: () => {
-            const currentZoom = mainWindow.webContents.getZoomLevel();
-            mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
-          },
-        },
-        {
-          label: "Уменьшить",
-          accelerator: "Ctrl+-",
-          click: () => {
-            const currentZoom = mainWindow.webContents.getZoomLevel();
-            mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
-          },
-        },
-        {
-          label: "Сбросить масштаб",
-          accelerator: "Ctrl+0",
-          click: () => {
-            mainWindow.webContents.setZoomLevel(0);
-          },
-        },
-        { type: "separator" },
-        {
-          label: "Полный экран",
-          accelerator: "F11",
-          click: () => {
-            mainWindow.setFullScreen(!mainWindow.isFullScreen());
-          },
-        },
-        { type: "separator" },
-        {
-          label: "Инструменты разработчика",
-          accelerator: "F12",
-          click: () => {
-            mainWindow.webContents.toggleDevTools();
-          },
-        },
+        { label: "Полный экран", accelerator: "F11", click: () => mainWindow.setFullScreen(!mainWindow.isFullScreen()) },
+        { label: "Инструменты разработчика", accelerator: "F12", click: () => mainWindow.webContents.toggleDevTools({ mode: "detach" }) },
       ],
     },
     {
@@ -188,34 +127,19 @@ function createMenu() {
 
 function startLocalServer() {
   return new Promise((resolve, reject) => {
-    if (server) {
-      resolve();
-      return;
-    }
+    if (server) return resolve();
 
     const staticPath = path.join(app.getAppPath(), "out");
-    console.log("Starting server for:", staticPath);
-
-    server = http.createServer((req, res) => {
-      return handler(req, res, {
-        public: staticPath,
-        cleanUrls: true,
-        trailingSlash: true,
-      });
-    });
+    server = http.createServer((req, res) => handler(req, res, { public: staticPath, cleanUrls: true, trailingSlash: true }));
 
     server.listen(PORT, "localhost", (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        console.log(`Local server started on http://localhost:${PORT}`);
-        resolve();
-      }
+      if (err) return reject(err);
+      console.log(`Local server started on http://localhost:${PORT}`);
+      resolve();
     });
 
     server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
-        console.log(`Port ${PORT} is busy, trying ${PORT + 1}`);
         PORT++;
         startLocalServer().then(resolve).catch(reject);
       } else {
@@ -225,44 +149,42 @@ function startLocalServer() {
   });
 }
 
+function initAutoUpdater() {
+  autoUpdater.logger = require("electron-log");
+  autoUpdater.logger.transports.file.level = "info";
+  autoUpdater.checkForUpdatesAndNotify();
+
+  autoUpdater.on("update-available", () => {
+    dialog.showMessageBox(mainWindow, { type: "info", message: "Доступно обновление. Оно будет загружено автоматически." });
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    dialog.showMessageBox(mainWindow, { type: "info", message: "Обновление загружено. Приложение будет перезапущено для установки обновления." })
+      .then(() => autoUpdater.quitAndInstall());
+  });
+
+  autoUpdater.on("error", (err) => console.error("Update error:", err));
+}
+
 app.whenReady().then(() => {
   createWindow();
   createMenu();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("window-all-closed", () => {
-  if (server) {
-    server.close();
-    server = null;
-  }
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  if (server) { server.close(); server = null; }
+  if (process.platform !== "darwin") app.quit();
 });
 
 app.on("before-quit", () => {
-  if (server) {
-    server.close();
-    server = null;
-  }
+  if (server) { server.close(); server = null; }
 });
 
 process.on("uncaughtException", (error) => {
   console.error("Uncaught Exception:", error);
   dialog.showErrorBox("Критическая ошибка", error.message);
-});
-
-app.on("certificate-error", (event, webContents, url, error, certificate, callback) => {
-  if (isDev) {
-    event.preventDefault();
-    callback(true);
-  } else {
-    callback(false);
-  }
 });
