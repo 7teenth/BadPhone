@@ -1,14 +1,18 @@
-const { app, BrowserWindow, Menu, dialog, shell, globalShortcut } = require("electron");
+const { app, BrowserWindow, Menu, dialog, shell, globalShortcut, ipcMain } = require("electron");
 const path = require("path");
 const http = require("http");
 const handler = require("serve-handler");
 const isDev = process.env.NODE_ENV === "development";
 const { autoUpdater } = require("electron-updater");
+const fs = require("fs");
 
 let server = null;
 let PORT = 3001;
 let mainWindow;
+let updateWindow = null;
+const versionFile = path.join(app.getPath("userData"), "version.txt"); // для хранения предыдущей версии
 
+// ------------------------- Создание главного окна -------------------------
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -47,7 +51,6 @@ async function createWindow() {
     return { action: "deny" };
   });
 
-  // DevTools для prod через F12
   globalShortcut.register("F12", () => {
     mainWindow.webContents.toggleDevTools({ mode: "detach" });
   });
@@ -83,8 +86,12 @@ async function createWindow() {
       );
     }
   });
+
+  // Показываем "Что нового" если версия изменилась
+  showWhatsNewIfUpdated();
 }
 
+// ------------------------- Меню -------------------------
 function createMenu() {
   const template = [
     {
@@ -125,6 +132,7 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
+// ------------------------- Локальный сервер -------------------------
 function startLocalServer() {
   return new Promise((resolve, reject) => {
     if (server) return resolve();
@@ -149,23 +157,126 @@ function startLocalServer() {
   });
 }
 
+// ------------------------- Инициализация автообновления -------------------------
 function initAutoUpdater() {
   autoUpdater.logger = require("electron-log");
   autoUpdater.logger.transports.file.level = "info";
   autoUpdater.checkForUpdatesAndNotify();
 
+  // 1️⃣ Уведомление о доступном обновлении
   autoUpdater.on("update-available", () => {
-    dialog.showMessageBox(mainWindow, { type: "info", message: "Доступно обновление. Оно будет загружено автоматически." });
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: "question",
+      buttons: ["Да", "Нет"],
+      title: "Доступно обновление",
+      message: "Доступна новая версия приложения. Хотите скачать обновление сейчас?",
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (choice === 0) {
+      openUpdateWindow(); // открываем окно прогресса
+      autoUpdater.downloadUpdate();
+    }
   });
 
+  // 2️⃣ Прогресс загрузки
+  autoUpdater.on("download-progress", (progress) => {
+    const percent = Math.round(progress.percent);
+    if (updateWindow) {
+      updateWindow.webContents.send("update-progress", percent);
+    }
+    mainWindow.setProgressBar(progress.percent / 100);
+  });
+
+  // 3️⃣ После загрузки — установка
   autoUpdater.on("update-downloaded", () => {
-    dialog.showMessageBox(mainWindow, { type: "info", message: "Обновление загружено. Приложение будет перезапущено для установки обновления." })
-      .then(() => autoUpdater.quitAndInstall());
+    mainWindow.setProgressBar(-1);
+    if (updateWindow) {
+      updateWindow.close();
+      updateWindow = null;
+    }
+    dialog.showMessageBox(mainWindow, {
+      type: "info",
+      buttons: ["OK"],
+      title: "Обновление готово",
+      message: "Обновление загружено. Приложение будет перезапущено для установки обновления.",
+    }).then(() => autoUpdater.quitAndInstall());
   });
 
   autoUpdater.on("error", (err) => console.error("Update error:", err));
 }
 
+// ------------------------- Окно прогресса обновления -------------------------
+function openUpdateWindow() {
+  if (updateWindow) return;
+
+  updateWindow = new BrowserWindow({
+    width: 400,
+    height: 150,
+    parent: mainWindow,
+    modal: true,
+    frame: false,
+    resizable: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: true },
+  });
+
+  updateWindow.loadURL(`data:text/html,
+  <html>
+    <head>
+      <title>Updating...</title>
+      <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; height: 100%; }
+        #progress { width: 80%; height: 25px; border: 1px solid #ccc; border-radius: 5px; margin-top: 20px; }
+        #bar { height: 100%; width: 0%; background: #4caf50; border-radius: 5px; }
+        #percent { margin-top: 10px; }
+      </style>
+    </head>
+    <body>
+      <h3>Загрузка обновления...</h3>
+      <div id="progress"><div id="bar"></div></div>
+      <div id="percent">0%</div>
+      <script>
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.on('update-progress', (event, percent) => {
+          document.getElementById('bar').style.width = percent + '%';
+          document.getElementById('percent').innerText = percent + '%';
+        });
+      </script>
+    </body>
+  </html>`);
+}
+
+// ------------------------- Окно "Что нового" -------------------------
+function showWhatsNewIfUpdated() {
+  const currentVersion = app.getVersion();
+  let previousVersion = null;
+
+  try {
+    previousVersion = fs.readFileSync(versionFile, "utf-8");
+  } catch (err) {
+    // Файл не существует — первый запуск
+  }
+
+  if (previousVersion !== currentVersion) {
+    fs.writeFileSync(versionFile, currentVersion); // сохраняем новую версию
+
+    if (previousVersion !== null) { // показываем только если это не первый запуск
+      dialog.showMessageBox(mainWindow, {
+        type: "info",
+        buttons: ["OK"],
+        title: `🎃 What's New in v${currentVersion}`,
+        message: `Привет! У вас новая версия: v${currentVersion}`,
+        detail:
+`• Fixed work shift bug
+• Users can no longer log in to the same profile on multiple stores
+• Added Halloween theme! 👻`
+      });
+    }
+  }
+}
+
+// ------------------------- App events -------------------------
 app.whenReady().then(() => {
   createWindow();
   createMenu();
