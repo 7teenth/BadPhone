@@ -1,24 +1,22 @@
 {
   "name": "bad-phone",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "PWA для продажів",
   "author": "Nikita Karvatskyi",
   "private": true,
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
-    "dev": "next dev",
-    "lint": "next lint",
-    "export": "next build",
-    "electron": "electron .",
-    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "pack": "npm run export && electron-builder --dir",
-    "dist": "npm run export && electron-builder --publish=never",
-    "build:all": "npm run export && electron-builder",
-    "build": "next build",
-    "start": "next start",
-    "clean": "rimraf dist out"
-  },
+  "dev": "next dev",
+  "lint": "next lint",
+  "clean": "rimraf dist .next out",
+  "build": "next build",
+  "build:static": "cross-env STATIC_EXPORT=true next build",
+  "electron": "electron .",
+  "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+  "dist": "npm run clean && npm run build:static && electron-builder --publish=never",
+  "start": "electron ."
+},
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.13.0",
@@ -51,12 +49,15 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/supabase-js": "latest",
     "@vercel/analytics": "^1.5.0",
-    "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "^2.30.0",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.6.2",
     "embla-carousel-react": "8.5.1",
+    "express": "^5.1.0",
+    "framer-motion": "^12.23.24",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
@@ -79,13 +80,15 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.21",
     "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
     "electron": "^32.2.7",
     "electron-builder": "^24.13.3",
-    "postcss": "^8.5",
+    "postcss": "^8.5.6",
     "prisma": "^6.13.0",
     "rimraf": "^6.0.1",
-    "tailwindcss": "^3.4.17",
+    "tailwindcss": "^3.4.18",
     "typescript": "^5",
     "wait-on": "^7.2.0"
   },
@@ -97,6 +100,7 @@
       "buildResources": "build"
     },
     "files": [
+      ".next/**/*",
       "out/**/*",
       "electron/main.js",
       "package.json"
@@ -105,6 +109,13 @@
       {
         "from": "electron/icon.ico",
         "to": "icon.ico"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "7teenth",
+        "repo": "bad-phone"
       }
     ],
     "win": {
