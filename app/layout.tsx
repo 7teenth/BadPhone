@@ -1,11 +1,12 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
-import "./globals.css"
-import { AppProvider } from "./context/app-context"
-import { Analytics } from "@vercel/analytics/next"
+import type React from "react";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { AppProvider } from "./context/app-context";
+import UpdateBanner from "./components/update-banner";
+import { Analytics } from "@vercel/analytics/next";
 
-const inter = Inter({ subsets: ["latin", "cyrillic"] })
+const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
   title: "BadPhone - Магазин мобільних аксесуарів",
@@ -13,18 +14,21 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico", // або /favicon.svg
   },
-}
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="uk">
       <body className={inter.className}>
-        <AppProvider>{children}</AppProvider>
+        <AppProvider>
+          <UpdateBanner />
+          {children}
+        </AppProvider>
       </body>
     </html>
-  )
+  );
 }

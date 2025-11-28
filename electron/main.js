@@ -24,6 +24,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
       enableRemoteModule: false,
       webSecurity: true,
     },
@@ -76,6 +77,20 @@ async function createWindow() {
   if (!isDev) {
     initAutoUpdater();
   }
+
+  // Listen to updater commands from renderer
+  ipcMain.on('updater:check', () => {
+    try { autoUpdater.checkForUpdates(); } catch (e) { console.warn('updater:check failed', e); }
+  });
+  ipcMain.on('updater:download', () => {
+    try { autoUpdater.downloadUpdate(); } catch (e) { console.warn('updater:download failed', e); }
+  });
+  ipcMain.on('updater:install', () => {
+    try { autoUpdater.quitAndInstall(); } catch (e) { console.warn('updater:install failed', e); }
+  });
+  ipcMain.on('updater:skip', () => {
+    console.log('Renderer requested skip update');
+  });
 
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription) => {
     console.error("Failed to load:", errorCode, errorDescription);
@@ -164,7 +179,7 @@ function initAutoUpdater() {
   autoUpdater.checkForUpdatesAndNotify();
 
   // 1️⃣ Уведомление о доступном обновлении
-  autoUpdater.on("update-available", () => {
+  autoUpdater.on("update-available", (info) => {
     const choice = dialog.showMessageBoxSync(mainWindow, {
       type: "question",
       buttons: ["Да", "Нет"],
@@ -178,6 +193,11 @@ function initAutoUpdater() {
       openUpdateWindow(); // открываем окно прогресса
       autoUpdater.downloadUpdate();
     }
+
+    // notify renderer UI
+    try {
+      if (mainWindow?.webContents) mainWindow.webContents.send('update-available', info || {});
+    } catch (e) {}
   });
 
   // 2️⃣ Прогресс загрузки
@@ -187,10 +207,13 @@ function initAutoUpdater() {
       updateWindow.webContents.send("update-progress", percent);
     }
     mainWindow.setProgressBar(progress.percent / 100);
+    try {
+      if (mainWindow?.webContents) mainWindow.webContents.send('download-progress', progress);
+    } catch (e) {}
   });
 
   // 3️⃣ После загрузки — установка
-  autoUpdater.on("update-downloaded", () => {
+  autoUpdater.on("update-downloaded", (info) => {
     mainWindow.setProgressBar(-1);
     if (updateWindow) {
       updateWindow.close();
@@ -202,9 +225,18 @@ function initAutoUpdater() {
       title: "Обновление готово",
       message: "Обновление загружено. Приложение будет перезапущено для установки обновления.",
     }).then(() => autoUpdater.quitAndInstall());
+
+    try {
+      if (mainWindow?.webContents) mainWindow.webContents.send('update-downloaded', info || {});
+    } catch (e) {}
   });
 
-  autoUpdater.on("error", (err) => console.error("Update error:", err));
+  autoUpdater.on("error", (err) => {
+    console.error("Update error:", err);
+    try {
+      if (mainWindow?.webContents) mainWindow.webContents.send('update-error', { message: err?.message || String(err) });
+    } catch (e) {}
+  });
 }
 
 // ------------------------- Окно прогресса обновления -------------------------

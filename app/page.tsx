@@ -112,6 +112,7 @@ export default function MainPage() {
   const [currentPage, setCurrentPage] = useState<Page>("main");
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
+  const [saleMeta, setSaleMeta] = useState<any | null>(null);
   const [loadingItems, setLoadingItems] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
@@ -177,8 +178,8 @@ export default function MainPage() {
     currentShift: { id: string; start_time: string; end_time: string } | null;
   };
 
-  // Get products from context for visit item details
-  const { products } = useApp() as { products: any[] };
+  // Get products & users from context for visit item details and seller names
+  const { products, users } = useApp() as { products: any[]; users: any[] };
 
   const [showBats, setShowBats] = useState(false);
 
@@ -208,28 +209,36 @@ export default function MainPage() {
   }, [isShiftActive]);
 
   const loadSaleItems = useCallback(async (saleId: string | null) => {
+    // Fetch richer sale metadata + items
     if (!saleId) {
       setItemsError("Продажу не знайдено");
       setSaleItems([]);
+      setSaleMeta(null);
       return;
     }
 
     setLoadingItems(true);
     setItemsError(null);
+    setSaleMeta(null);
 
     try {
+      // Get sale row: items_data, payment_method and some useful fields
       const { data: saleData, error } = await supabase
         .from("sales")
-        .select("items_data")
+        .select(
+          "id, items_data, payment_method, total_amount, receipt_number, created_at, seller_id"
+        )
         .eq("id", saleId)
         .maybeSingle();
 
       if (error || !saleData) {
         setItemsError(error?.message || "Продажу не знайдено");
         setSaleItems([]);
+        setSaleMeta(null);
         return;
       }
 
+      // Normalize items_data (it may be JSON string or array)
       const items: SaleItem[] =
         typeof saleData.items_data === "string"
           ? JSON.parse(saleData.items_data)
@@ -238,10 +247,41 @@ export default function MainPage() {
           : [];
 
       setSaleItems(items);
+      // find seller name locally if possible
+      let sellerName = null;
+      if (saleData.seller_id && Array.isArray(users)) {
+        const foundUser = users.find((u) => u.id === saleData.seller_id);
+        if (foundUser) sellerName = foundUser.name;
+      }
+
+      // if we didn't find seller, try fetch minimal info
+      if (!sellerName && saleData.seller_id) {
+        try {
+          const { data: u } = await supabase
+            .from("users")
+            .select("id, name")
+            .eq("id", saleData.seller_id)
+            .maybeSingle();
+          if (u?.name) sellerName = u.name;
+        } catch (e) {
+          /* ignore */
+        }
+      }
+
+      setSaleMeta({
+        id: saleData.id,
+        payment_method: saleData.payment_method,
+        total_amount: saleData.total_amount,
+        receipt_number: saleData.receipt_number,
+        seller_name: sellerName || null,
+        created_at: saleData.created_at,
+        seller_id: saleData.seller_id,
+      });
     } catch (error) {
-      console.error("Error loading sale items:", error);
+      console.error("Error loading sale items/metadata:", error);
       setItemsError("Помилка завантаження товарів");
       setSaleItems([]);
+      setSaleMeta(null);
     } finally {
       setLoadingItems(false);
     }
@@ -955,49 +995,108 @@ export default function MainPage() {
         {/* Деталі вибраного візиту */}
         {selectedVisit && (
           <>
-          <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40 p-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full p-6 overflow-auto max-h-[90vh]">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">
-                  Візит: {selectedVisit.title}
-                </h3>
-                <Button variant="ghost" onClick={closeModal}>
-                  Закрити
-                </Button>
-              </div>
-              {loadingItems && <p>Завантаження товарів...</p>}
-              {itemsError && <p className="text-red-600">{itemsError}</p>}
-              {!loadingItems && !itemsError && (
-                <div>
-                  {saleItems.length === 0 ? (
-                    <p>Товари відсутні</p>
-                  ) : (
-                    <ul className="divide-y divide-gray-200">
-                      {saleItems.map((item, idx) => (
-                        <li key={idx} className="py-2 flex items-center justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <button
-                              onClick={() => openProductDetails(item)}
-                              className="text-left w-full text-sm font-medium text-gray-800 hover:underline truncate"
-                            >
-                              {item.product_name}
-                            </button>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {item.brand ? `${item.brand} ` : ""}{item.model ? `${item.model}` : ""}
-                              {item.quantity ? <span className="ml-2">x{item.quantity}</span> : null}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-semibold text-green-600">{(item.price || 0).toLocaleString()} ₴</div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40 p-4">
+              <div className="bg-white rounded-lg max-w-2xl w-full p-6 overflow-auto max-h-[90vh]">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">
+                    Візит: {selectedVisit.title}
+                  </h3>
+                  <Button variant="ghost" onClick={closeModal}>
+                    Закрити
+                  </Button>
                 </div>
-              )}
+                {loadingItems && <p>Завантаження товарів...</p>}
+                {saleMeta && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded border">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        Чек:{" "}
+                        <span className="font-medium text-gray-800">
+                          {saleMeta.receipt_number || "—"}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(saleMeta.created_at).toLocaleString("uk-UA")}
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="text-sm">Оплата:</div>
+                      <div>
+                        {saleMeta.payment_method === "terminal" ? (
+                          <span className="px-2 py-1 rounded text-xs bg-purple-600 text-white">
+                            Термінал
+                          </span>
+                        ) : saleMeta.payment_method === "cash" ? (
+                          <span className="px-2 py-1 rounded text-xs bg-orange-500 text-white">
+                            Готівка
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="ml-4 text-sm text-gray-700">
+                        Продавець:{" "}
+                        <span className="font-medium text-gray-800">
+                          {saleMeta.seller_name || "Невідомий"}
+                        </span>
+                      </div>
+                      <div className="ml-auto text-sm font-semibold text-green-700">
+                        Сума:{" "}
+                        {Number(saleMeta.total_amount || 0).toLocaleString()} ₴
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {itemsError && <p className="text-red-600">{itemsError}</p>}
+                {!loadingItems && !itemsError && (
+                  <div>
+                    {saleItems.length === 0 ? (
+                      <p>Товари відсутні</p>
+                    ) : (
+                      <ul className="divide-y divide-gray-200">
+                        {saleItems.map((item, idx) => (
+                          <li
+                            key={idx}
+                            className="py-2 flex items-center justify-between gap-4"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <button
+                                onClick={() => openProductDetails(item)}
+                                className="text-left w-full text-sm font-medium text-gray-800 hover:underline truncate"
+                              >
+                                {item.product_name}
+                              </button>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {item.brand ? `${item.brand} ` : ""}
+                                {item.model ? `${item.model}` : ""}
+                                {item.quantity ? (
+                                  <span className="ml-2">x{item.quantity}</span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-semibold text-green-600">
+                                {(item.price || 0).toLocaleString()} ₴
+                              </div>
+                              {item.product_id && products && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  На складі:{" "}
+                                  {(() => {
+                                    const prod = products.find(
+                                      (p) => p.id === item.product_id
+                                    );
+                                    return prod ? prod.quantity : "—";
+                                  })()}{" "}
+                                  шт
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
             <ProductDetailModal
               isOpen={productDetailsOpen}
               product={productDetails}

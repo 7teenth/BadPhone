@@ -1,42 +1,43 @@
-"use client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Printer, Download, Plus, Home } from "lucide-react"
+"use client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Printer, Download, Plus, Home } from "lucide-react";
 
 interface SaleItem {
-  id: string
-  name: string
-  brand?: string
-  model?: string
-  price: number
-  cartQuantity: number
+  id: string;
+  name: string;
+  brand?: string;
+  model?: string;
+  price: number;
+  cartQuantity: number;
 }
 
 interface Sale {
-  id: string
-  receiptNumber: string
-  date: Date | string
-  items: SaleItem[]
-  total: number
-  subtotal?: number
-  discountAmount?: number
-  paymentMethod?: string
+  id: string;
+  receiptNumber: string;
+  date: Date | string;
+  items: SaleItem[];
+  total: number;
+  subtotal?: number;
+  discountAmount?: number;
+  paymentMethod?: string;
 }
 
 interface SaleReceiptProps {
-  sale: Sale
-  onNewSale: () => void
-  onBack: () => void
+  sale: Sale;
+  onNewSale: () => void;
+  onBack: () => void;
 }
 
 export function SaleReceipt({ sale, onNewSale, onBack }: SaleReceiptProps) {
+  const [showPrintPreview, setShowPrintPreview] = React.useState(false);
   const handlePrint = () => {
     if (window.print) {
-      window.print()
+      window.print();
     } else {
-      alert("Функція друку не підтримується вашим браузером")
+      alert("Функція друку не підтримується вашим браузером");
     }
-  }
+  };
   const handleDownload = () => {
     try {
       // Создаем простой текстовый чек для загрузки
@@ -58,44 +59,130 @@ ${
           (item) =>
             `${item.name || "Невідомий товар"}
 ${item.brand || ""} ${item.model || ""}
-${item.cartQuantity || 0} шт × ${(item.price || 0).toLocaleString()} ₴ = ${((item.cartQuantity || 0) * (item.price || 0)).toLocaleString()} ₴`,
+${item.cartQuantity || 0} шт × ${(item.price || 0).toLocaleString()} ₴ = ${(
+              (item.cartQuantity || 0) * (item.price || 0)
+            ).toLocaleString()} ₴`
         )
         .join("\n\n")
     : "Товари відсутні"
 }
 
-Кількість товарів: ${sale.items ? sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0), 0) : 0} шт
+Кількість товарів: ${
+        sale.items
+          ? sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0), 0)
+          : 0
+      } шт
 ${sale.subtotal ? `Підсума: ${sale.subtotal.toLocaleString()} ₴` : ""}
-${sale.discountAmount && sale.discountAmount > 0 ? `Знижка: -${sale.discountAmount.toLocaleString()} ₴` : ""}
+${
+  sale.discountAmount && sale.discountAmount > 0
+    ? `Знижка: -${sale.discountAmount.toLocaleString()} ₴`
+    : ""
+}
 До сплати: ${safeTotal.toLocaleString()} ₴
 ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
 
 Дякуємо за покупку!
 Гарантія на товар згідно з законодавством України
 При поверненні товару чек обов'язковий
-      `.trim()
+      `.trim();
 
-      const blob = new Blob([receiptText], { type: "text/plain;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `receipt-${sale.receiptNumber || "unknown"}.txt`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      const blob = new Blob([receiptText], {
+        type: "text/plain;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `receipt-${sale.receiptNumber || "unknown"}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("Error downloading receipt:", error)
-      alert("Помилка при завантаженні чеку")
+      console.error("Error downloading receipt:", error);
+      alert("Помилка при завантаженні чеку");
     }
-  }
+  };
+
+  const openPrintWindow = () => {
+    try {
+      const receiptHtml = `<!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Чек ${sale.receiptNumber}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 24px; color: #111 }
+          h1 { font-size: 20px }
+          .small { font-size: 12px; color: #666 }
+          .items { margin-top: 12px }
+          .item { display:flex; justify-content:space-between; margin-bottom:6px }
+          .total { font-weight: 700; margin-top: 12px }
+        </style>
+      </head>
+      <body>
+        <h1>BadPhone — Чек ${sale.receiptNumber}</h1>
+        <div class="small">Дата: ${
+          saleDate ? saleDate.toLocaleString("uk-UA") : "–"
+        }</div>
+        <div class="items">
+          ${
+            sale.items && sale.items.length > 0
+              ? sale.items
+                  .map(
+                    (item) => `
+            <div class="item">
+              <div style="max-width:70%">${item.name || "Невідомий товар"} ${
+                      item.brand ? `(${item.brand})` : ""
+                    } ${item.model ? `— ${item.model}` : ""}</div>
+              <div>${item.cartQuantity || 0}×${(
+                      item.price || 0
+                    ).toLocaleString()} ₴</div>
+            </div>`
+                  )
+                  .join("")
+              : "<div>Товари відсутні</div>"
+          }
+        </div>
+        <div class="total">До сплати: ${safeTotal.toLocaleString()} ₴</div>
+        <div style="margin-top:20px; font-size:12px; color:#666">Дякуємо за покупку!</div>
+      </body>
+      </html>`;
+
+      const w = window.open("", "_blank", "noopener,noreferrer");
+      if (!w) {
+        alert(
+          "Не вдалося відкрити вікно друку — перевірте налаштування браузера."
+        );
+        return;
+      }
+      w.document.open();
+      w.document.write(receiptHtml);
+      w.document.close();
+      // Give the new window a moment to render before printing
+      setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+        } catch (e) {
+          console.warn("print failed", e);
+        }
+      }, 250);
+    } catch (err) {
+      console.error("openPrintWindow failed", err);
+      alert("Помилка при спробі друку");
+    }
+  };
 
   // Безопасно получаем дату (преобразуем, если нужно)
-  const saleDate = sale.date ? new Date(sale.date) : null
+  const saleDate = sale.date ? new Date(sale.date) : null;
 
   // Safe total calculation with fallback
   const safeTotal =
-    sale.total || sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0) * (item.price || 0), 0)
+    sale.total ||
+    sale.items.reduce(
+      (sum, item) => sum + (item.cartQuantity || 0) * (item.price || 0),
+      0
+    );
 
   return (
     <div className="min-h-screen bg-gray-200">
@@ -112,11 +199,19 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
         </Button>
         <h1 className="text-2xl font-bold">Чек продажу</h1>
         <div className="ml-auto flex gap-2">
-          <Button variant="ghost" onClick={handlePrint} className="text-white hover:bg-gray-800">
+          <Button
+            variant="ghost"
+            onClick={handlePrint}
+            className="text-white hover:bg-gray-800"
+          >
             <Printer className="h-4 w-4 mr-2" />
             Друк
           </Button>
-          <Button variant="ghost" onClick={handleDownload} className="text-white hover:bg-gray-800">
+          <Button
+            variant="ghost"
+            onClick={handleDownload}
+            className="text-white hover:bg-gray-800"
+          >
             <Download className="h-4 w-4 mr-2" />
             Завантажити
           </Button>
@@ -144,11 +239,15 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
               </div>
               <div className="flex justify-between">
                 <span>Дата:</span>
-                <span>{saleDate ? saleDate.toLocaleDateString("uk-UA") : "–"}</span>
+                <span>
+                  {saleDate ? saleDate.toLocaleDateString("uk-UA") : "–"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Час:</span>
-                <span>{saleDate ? saleDate.toLocaleTimeString("uk-UA") : "–"}</span>
+                <span>
+                  {saleDate ? saleDate.toLocaleTimeString("uk-UA") : "–"}
+                </span>
               </div>
             </div>
 
@@ -160,7 +259,9 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
                   <div key={item.id || index} className="space-y-1">
                     <div className="flex justify-between items-start">
                       <div className="flex-1 pr-2">
-                        <p className="text-sm font-medium line-clamp-2">{item.name || "Невідомий товар"}</p>
+                        <p className="text-sm font-medium line-clamp-2">
+                          {item.name || "Невідомий товар"}
+                        </p>
                         <p className="text-xs text-gray-600">
                           {item.brand || ""} {item.model || ""}
                         </p>
@@ -168,13 +269,19 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>
-                        {item.cartQuantity || 0} шт × {(item.price || 0).toLocaleString()} ₴
+                        {item.cartQuantity || 0} шт ×{" "}
+                        {(item.price || 0).toLocaleString()} ₴
                       </span>
                       <span className="font-medium">
-                        {((item.cartQuantity || 0) * (item.price || 0)).toLocaleString()} ₴
+                        {(
+                          (item.cartQuantity || 0) * (item.price || 0)
+                        ).toLocaleString()}{" "}
+                        ₴
                       </span>
                     </div>
-                    {index < sale.items.length - 1 && <hr className="border-dashed" />}
+                    {index < sale.items.length - 1 && (
+                      <hr className="border-dashed" />
+                    )}
                   </div>
                 ))
               ) : (
@@ -186,7 +293,15 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
             <div className="border-t border-dashed pt-4 space-y-2">
               <div className="flex justify-between">
                 <span>Кількість товарів:</span>
-                <span>{sale.items ? sale.items.reduce((sum, item) => sum + (item.cartQuantity || 0), 0) : 0} шт</span>
+                <span>
+                  {sale.items
+                    ? sale.items.reduce(
+                        (sum, item) => sum + (item.cartQuantity || 0),
+                        0
+                      )
+                    : 0}{" "}
+                  шт
+                </span>
               </div>
               {sale.subtotal && (
                 <div className="flex justify-between">
@@ -223,11 +338,23 @@ ${sale.paymentMethod ? `Спосіб оплати: ${sale.paymentMethod}` : ""}
 
         {/* Buttons */}
         <div className="max-w-md mx-auto mt-6 flex gap-4 print:hidden">
-          <Button onClick={onBack} variant="outline" className="flex-1 bg-transparent">
+          <Button
+            onClick={onBack}
+            variant="outline"
+            className="flex-1 bg-transparent"
+          >
             На головну
+          </Button>
+          <Button
+            onClick={openPrintWindow}
+            variant="default"
+            className="flex-1"
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Друк
           </Button>
         </div>
       </div>
     </div>
-  )
+  );
 }
