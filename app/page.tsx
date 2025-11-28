@@ -31,7 +31,10 @@ import { useApp } from "./context/app-context";
 import { SalesHistory } from "./components/sales-history";
 import { UsersManagement } from "./components/users-management";
 import { supabase } from "@/lib/supabase";
+import type { Visit } from "@/lib/supabase";
 import { ShiftStatsModal } from "./components/shift-stats-modal";
+import ProductDetailModal from "./components/product-detail-modal";
+import Header from "@/components/ui/header";
 
 // Простые компоненты вместо shadcn/ui
 
@@ -101,18 +104,11 @@ type Page =
   | "users";
 type UserRole = "seller" | "owner";
 
-type Visit = {
-  id: string;
-  title: string;
-  sale_amount: number;
-  created_at: string;
-  store_id?: string;
-  seller_id?: string;
-  sale_id?: string | null;
-  seller?: { name: string } | null;
-};
+// Using Visit interface imported from lib/supabase
 
 export default function MainPage() {
+  const [showSnow, setShowSnow] = useState(true);
+
   const [currentPage, setCurrentPage] = useState<Page>("main");
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
@@ -180,6 +176,9 @@ export default function MainPage() {
     loadData: (user: any) => Promise<void>; // ✅ Добавляем типизацию
     currentShift: { id: string; start_time: string; end_time: string } | null;
   };
+
+  // Get products from context for visit item details
+  const { products } = useApp() as { products: any[] };
 
   const [showBats, setShowBats] = useState(false);
 
@@ -262,6 +261,32 @@ export default function MainPage() {
     setSelectedVisit(null);
     setSaleItems([]);
     setItemsError(null);
+  };
+
+  // product detail modal
+  const [productDetailsOpen, setProductDetailsOpen] = useState(false);
+  const [productDetails, setProductDetails] = useState<any | null>(null);
+
+  const openProductDetails = (item: any) => {
+    // Try to find product in context by id
+    const pid = item?.product_id;
+    const found = pid ? products.find((p) => p.id === pid) : null;
+    if (found) {
+      setProductDetails(found);
+    } else {
+      // Build a fallback product object from item
+      setProductDetails({
+        id: pid || null,
+        name: item.product_name || item.name || "Невідомий товар",
+        brand: item.brand || "",
+        model: item.model || "",
+        price: item.price || 0,
+        quantity: item.remaining ?? 0,
+        barcode: item.barcode || null,
+        description: item.description || "",
+      });
+    }
+    setProductDetailsOpen(true);
   };
 
   function generateReceiptNumber(): string {
@@ -347,7 +372,11 @@ export default function MainPage() {
   // ✅ ИСПРАВЛЕННАЯ функция создания продажи
   async function createSaleAndLinkVisit(
     visitId: string,
-    saleData: { items_data: SaleItem[]; total_amount: number }
+    saleData: {
+      items_data: SaleItem[];
+      total_amount: number;
+      payment_method?: "cash" | "terminal";
+    }
   ): Promise<{ id: string }> {
     console.log("🚀 createSaleAndLinkVisit called!");
 
@@ -383,11 +412,11 @@ export default function MainPage() {
     try {
       console.log("🔄 Creating sale...");
 
-      // Создаем продажу через контекст
+      // Создаем продажу через контекст с корректным payment_method
       await addSale({
         receipt_number,
         total_amount: saleData.total_amount,
-        payment_method: "cash",
+        payment_method: saleData.payment_method || "cash",
         items_data: saleData.items_data,
         seller_id: currentUser.id,
       });
@@ -401,7 +430,7 @@ export default function MainPage() {
       console.log("🔍 Finding created sale...");
       const { data: createdSale, error: findError } = await supabase
         .from("sales")
-        .select("id")
+        .select("id, payment_method")
         .eq("receipt_number", receipt_number)
         .eq("seller_id", currentUser.id)
         .order("created_at", { ascending: false })
@@ -422,7 +451,11 @@ export default function MainPage() {
       console.log("🔗 Linking visit with sale...");
       const { error: visitError } = await supabase
         .from("visits")
-        .update({ sale_id: createdSale.id, sale_amount: saleData.total_amount })
+        .update({
+          sale_id: createdSale.id,
+          sale_amount: saleData.total_amount,
+          payment_method: createdSale.payment_method || null,
+        })
         .eq("id", visitId);
 
       if (visitError) {
@@ -500,9 +533,14 @@ export default function MainPage() {
   };
 
   const handleLogout = () => {
-    logout();
+    logout(); // очищает токен и состояние
+
     setCurrentPage("main");
     setActiveVisitId(null);
+
+    // 🔥 ВАЖНО: принудительная перезагрузка страницы
+    // полностью сбрасывает React state + context
+    window.location.reload();
   };
 
   const openShiftStatsModal = () => setShowShiftStatsModal(true);
@@ -636,201 +674,6 @@ export default function MainPage() {
 
   return (
     <div className="min-h-screen bg-gray-200">
-      {/* Header */}
-      {/* Halloween Header */}
-      <header className="bg-gradient-to-r from-orange-900 via-black to-purple-900 text-orange-100 px-6 py-3 flex justify-between items-center shadow-lg border-b border-orange-700 relative overflow-hidden">
-        {/* 👻 Светящиеся фоновые элементы */}
-        {/* 🦇 Летучие мыши */}
-        <AnimatePresence>
-          {showBats && (
-            <motion.div
-              className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              {[...Array(5)].map((_, i) => (
-                <motion.div
-                  key={i}
-                  className="absolute text-xl sm:text-2xl"
-                  style={{
-                    top: `${Math.random() * 60}%`,
-                    left: `${Math.random() * 100}%`,
-                  }}
-                  initial={{ x: -200, y: 0, rotate: 0 }}
-                  animate={{
-                    x: window.innerWidth + 200,
-                    y: Math.random() * 80 - 40,
-                    rotate: [0, 20, -20, 0],
-                  }}
-                  transition={{
-                    duration: 4 + Math.random() * 1.5,
-                    ease: "easeInOut",
-                  }}
-                >
-                  🦇
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="absolute inset-0 opacity-10 bg-[url('/pumpkin-pattern.png')] bg-repeat animate-pulse" />
-        <div className="absolute top-0 left-0 w-32 h-32 bg-orange-600/20 rounded-full blur-3xl animate-ping" />
-        <div className="absolute bottom-0 right-0 w-40 h-40 bg-purple-600/20 rounded-full blur-3xl animate-pulse" />
-
-        {/* === Левая часть === */}
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-extrabold text-orange-400 drop-shadow-[0_0_5px_rgba(255,128,0,0.6)] flex items-center gap-2">
-              🎃 BadPhone
-            </h1>
-
-            {currentStore && (
-              <div className="flex items-center gap-1 text-sm bg-orange-950/50 border border-orange-800 px-2 py-1 rounded-lg text-orange-300">
-                <Store className="h-3 w-3 text-orange-400" />
-                <span>{currentStore.name}</span>
-              </div>
-            )}
-          </div>
-
-          {isShiftActive ? (
-            <Button
-              onClick={openShiftStatsModal}
-              size="sm"
-              variant="destructive"
-              className="flex items-center gap-2 bg-red-700 hover:bg-red-800 text-white border border-red-900 shadow-md"
-              title="Завершити зміну"
-            >
-              <LogOut className="h-4 w-4" />
-              Завершити зміну
-            </Button>
-          ) : (
-            <Button
-              onClick={startShift}
-              size="sm"
-              variant="secondary"
-              className="flex items-center gap-2 bg-orange-700 hover:bg-orange-800 text-black font-semibold border border-orange-900 shadow-md"
-              disabled={!isOnline}
-            >
-              <Play className="h-4 w-4" />
-              Почати зміну
-            </Button>
-          )}
-        </div>
-
-        {/* === Правая часть === */}
-        <div className="flex items-center gap-6 relative z-10">
-          <div className="flex items-center gap-2">
-            {isOnline ? (
-              <Wifi className="h-4 w-4 text-green-400 animate-pulse" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-red-500 animate-pulse" />
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 text-orange-200">
-            <User className="h-4 w-4" />
-            <span className="text-sm">{currentUser?.name}</span>
-
-            {currentUser?.role === "owner" && (
-              <Badge className="bg-purple-700 border border-purple-900 text-orange-200 text-xs">
-                🕸️ Власник
-              </Badge>
-            )}
-            {currentUser?.role === "seller" && (
-              <Badge className="bg-orange-700 border border-orange-900 text-black text-xs">
-                🧛 Продавець
-              </Badge>
-            )}
-          </div>
-
-          {isShiftActive && (
-            <div className="flex items-center gap-2 text-sm bg-orange-950/40 border border-orange-800 px-3 py-1 rounded-lg text-orange-300">
-              <Clock className="h-4 w-4 text-orange-400" />
-              <span>
-                {workingHours || 0} год. {workingMinutes || 0} хв.
-              </span>
-            </div>
-          )}
-
-          <div className="text-lg font-mono bg-orange-950/40 px-3 py-1 rounded-lg border border-orange-800 text-orange-300">
-            {currentTime}
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-orange-400 hover:bg-orange-950/50 border border-orange-800"
-            title="Вийти"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-      </header>
-
-      {/* <header className="bg-black text-white px-6 py-3 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">BadPhone</h1>
-            {currentStore && (
-              <div className="flex items-center gap-1 text-sm bg-gray-800 px-2 py-1 rounded">
-                <Store className="h-3 w-3" />
-                <span>{currentStore.name}</span>
-              </div>
-            )}
-          </div>
-          {isShiftActive ? (
-            <Button
-              onClick={openShiftStatsModal}
-              size="sm"
-              variant="destructive"
-              className="flex items-center gap-2"
-              title="Завершити зміну"
-            >
-              <LogOut className="h-4 w-4" />
-              Завершити зміну
-            </Button>
-          ) : (
-            <Button
-              onClick={startShift}
-              size="sm"
-              variant="secondary"
-              className="flex items-center gap-2"
-              disabled={!isOnline}
-            >
-              <Play className="h-4 w-4" />
-              Почати зміну
-            </Button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            {isOnline ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-red-400" />}
-          </div>
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            <span className="text-sm">{currentUser?.name}</span>
-            {currentUser?.role === "owner" && <Badge className="bg-purple-600 text-white text-xs">Власник</Badge>}
-            {currentUser?.role === "seller" && <Badge className="bg-blue-600 text-white text-xs">Продавець</Badge>}
-          </div>
-          {isShiftActive && (
-            <div className="flex items-center gap-2 text-sm bg-gray-800 px-3 py-1 rounded">
-              <Clock className="h-4 w-4" />
-              <span>
-                {workingHours || 0} год. {workingMinutes || 0} хв.
-              </span>
-            </div>
-          )}
-          <div className="text-lg font-mono bg-gray-800 px-3 py-1 rounded">{currentTime}</div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-white hover:bg-gray-800 px-3">
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-      </header> */}
-
       {!isOnline && (
         <div className="bg-yellow-600 text-white px-6 py-2 text-center text-sm">
           <div className="flex items-center justify-center gap-2">
@@ -839,6 +682,19 @@ export default function MainPage() {
           </div>
         </div>
       )}
+
+      <Header
+        currentStore={currentStore}
+        currentUser={currentUser}
+        isOnline={isOnline}
+        isShiftActive={isShiftActive}
+        workingHours={workingHours}
+        workingMinutes={workingMinutes}
+        currentTime={currentTime}
+        startShift={startShift}
+        openShiftStatsModal={openShiftStatsModal}
+        handleLogout={handleLogout}
+      />
 
       <main className="p-6 space-y-6">
         {!isShiftActive && (
@@ -981,6 +837,21 @@ export default function MainPage() {
                         <div className="text-2xl font-bold text-green-400">
                           {(visit.sale_amount || 0).toLocaleString()} ₴
                         </div>
+                        <div className="mt-2 flex items-center justify-center gap-2">
+                          {visit.payment_method ? (
+                            <Badge
+                              className={
+                                visit.payment_method === "terminal"
+                                  ? "bg-purple-600 text-white text-xs"
+                                  : "bg-orange-500 text-white text-xs"
+                              }
+                            >
+                              {visit.payment_method === "terminal"
+                                ? "Термінал"
+                                : "Готівка"}
+                            </Badge>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-gray-400 mt-1">
                           {new Date(visit.created_at).toLocaleTimeString(
                             "uk-UA",
@@ -1083,6 +954,7 @@ export default function MainPage() {
 
         {/* Деталі вибраного візиту */}
         {selectedVisit && (
+          <>
           <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40 p-4">
             <div className="bg-white rounded-lg max-w-2xl w-full p-6 overflow-auto max-h-[90vh]">
               <div className="flex justify-between items-center mb-4">
@@ -1102,9 +974,22 @@ export default function MainPage() {
                   ) : (
                     <ul className="divide-y divide-gray-200">
                       {saleItems.map((item, idx) => (
-                        <li key={idx} className="py-2 flex justify-between">
-                          <span>{item.product_name}</span>
-                          <span>{(item.price || 0).toLocaleString()} ₴</span>
+                        <li key={idx} className="py-2 flex items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <button
+                              onClick={() => openProductDetails(item)}
+                              className="text-left w-full text-sm font-medium text-gray-800 hover:underline truncate"
+                            >
+                              {item.product_name}
+                            </button>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {item.brand ? `${item.brand} ` : ""}{item.model ? `${item.model}` : ""}
+                              {item.quantity ? <span className="ml-2">x{item.quantity}</span> : null}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-green-600">{(item.price || 0).toLocaleString()} ₴</div>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -1113,6 +998,12 @@ export default function MainPage() {
               )}
             </div>
           </div>
+            <ProductDetailModal
+              isOpen={productDetailsOpen}
+              product={productDetails}
+              onClose={() => setProductDetailsOpen(false)}
+            />
+          </>
         )}
       </main>
     </div>

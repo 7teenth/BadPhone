@@ -25,6 +25,13 @@ interface Store {
   updated_at: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 interface Product {
   id: string;
   store_id: string;
@@ -59,6 +66,7 @@ interface Visit {
   seller_id?: string;
   title: string;
   sale_amount: number;
+  payment_method?: "cash" | "terminal" | null;
   created_at: string;
   seller?: User;
 }
@@ -80,6 +88,7 @@ interface AppState {
   sales: Sale[];
   visits: Visit[];
   products: Product[];
+  categories: Category[];
   users: User[];
   stores: Store[];
   currentShift: Shift | null;
@@ -121,6 +130,7 @@ interface AppContextType extends AppState {
     storeId: string | null
   ) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
+  createCategory: (name: string) => Promise<Category | null>;
   getDailySalesStats: () => any[];
   getTotalStats: () => any;
   loadData: (user: User | null) => Promise<void>;
@@ -148,6 +158,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [storesLoading, setStoresLoading] = useState(true);
@@ -159,6 +170,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentStore, setCurrentStore] = useState<Store | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  // If a shift should be auto-closed at midnight but we were offline at that moment,
+  // track a pending auto-close so we can finish it when we return online.
+  const [pendingAutoClose, setPendingAutoClose] = useState(false);
 
   const currentStoreId = currentStore?.id || null;
 
@@ -314,6 +328,108 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [currentShift]);
 
+  // Auto-close active shifts at midnight (midnight relative to the shift start date).
+  useEffect(() => {
+    if (!currentShift) {
+      setPendingAutoClose(false);
+      return;
+    }
+
+    // compute the next midnight after the shift start
+    try {
+      const shiftStart = new Date(currentShift.start_time);
+      const nextMidnight = new Date(
+        shiftStart.getFullYear(),
+        shiftStart.getMonth(),
+        shiftStart.getDate() + 1,
+        0,
+        0,
+        0,
+        0
+      );
+
+      const now = new Date();
+
+      // If we've already passed the scheduled midnight boundary, try to close immediately
+      if (now >= nextMidnight) {
+        if (isOnline) {
+          // call endShift (makes a DB update)
+          (async () => {
+            try {
+              console.log(
+                "⏰ Auto-closing shift immediately (missed midnight) — calling endShift"
+              );
+              await endShift();
+              setPendingAutoClose(false);
+            } catch (err) {
+              console.warn("Auto-close failed (will retry when online):", err);
+              setPendingAutoClose(true);
+            }
+          })();
+        } else {
+          // we missed the midnight while offline — mark pending so we handle when we're back online
+          console.log(
+            "⏰ Missed midnight but offline — marking pending auto-close"
+          );
+          setPendingAutoClose(true);
+        }
+
+        return;
+      }
+
+      // Otherwise schedule a timer to trigger at that exact boundary
+      const msUntil = nextMidnight.getTime() - now.getTime();
+      console.log(
+        "⏳ Scheduling auto-close for shift at:",
+        nextMidnight.toISOString(),
+        "in ms:",
+        msUntil
+      );
+      const timer = setTimeout(async () => {
+        try {
+          if (isOnline) {
+            console.log("⌛ Reached midnight — auto-closing active shift");
+            await endShift();
+            setPendingAutoClose(false);
+          } else {
+            console.log(
+              "⌛ Reached midnight but offline — will auto-close when back online"
+            );
+            setPendingAutoClose(true);
+          }
+        } catch (err) {
+          console.error("Auto-close at midnight failed:", err);
+          setPendingAutoClose(true);
+        }
+      }, msUntil);
+
+      return () => clearTimeout(timer);
+    } catch (err) {
+      console.warn("Auto-close schedule failed:", err);
+    }
+  }, [currentShift, isOnline]);
+
+  // If we were waiting to auto-close a shift (missed midnight while offline)
+  // and we regained connectivity, end the shift now.
+  useEffect(() => {
+    if (!isOnline || !pendingAutoClose || !currentShift) return;
+
+    (async () => {
+      try {
+        console.log(
+          "📡 Back online and pending auto-close exists — closing shift now"
+        );
+        await endShift();
+        setPendingAutoClose(false);
+      } catch (err) {
+        console.error(
+          "Failed to auto-close shift after regaining online:",
+          err
+        );
+      }
+    })();
+  }, [isOnline, pendingAutoClose, currentShift]);
+
   // Persist currentShift to localStorage so app can restore when offline / after crash
   useEffect(() => {
     try {
@@ -413,6 +529,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (user) {
         await loadProducts(user);
+        // Load persisted categories (try DB first, fall back to cache)
+        try {
+          const { data: categoryData, error: catError } = await supabase
+            .from("categories")
+            .select("*")
+            .order("name", { ascending: true });
+          if (!catError && categoryData) {
+            setCategories(categoryData);
+            try {
+              localStorage.setItem("categories", JSON.stringify(categoryData));
+            } catch (e) {}
+          }
+        } catch (e) {
+          console.warn("Failed to load categories from DB, will try cache:", e);
+          try {
+            const cached = localStorage.getItem("categories");
+            if (cached) setCategories(JSON.parse(cached));
+          } catch (err) {}
+        }
       }
 
       const recalcTotalSalesAmount = (salesList: Sale[]) => {
@@ -874,6 +1009,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("addProduct failed:", error);
     }
+  };
+
+  const createCategory = async (name: string): Promise<Category | null> => {
+    if (!isOnline) return null;
+    const cleaned = name.trim();
+    if (!cleaned) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from("categories")
+        .insert([{ name: cleaned }])
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        // If already exists, fetch existing and return it
+        if ((error as any).code === "23505") {
+          const { data: existing } = await supabase
+            .from("categories")
+            .select("*")
+            .eq("name", cleaned)
+            .maybeSingle();
+          if (existing) {
+            setCategories((prev) => {
+              const found = prev.find((p) => p.id === existing.id);
+              if (found) return prev;
+              return [...prev, existing];
+            });
+            return existing as Category;
+          }
+        }
+        console.error("createCategory error:", error);
+        return null;
+      }
+
+      if (data) {
+        setCategories((prev) => [...prev, data]);
+        try {
+          localStorage.setItem(
+            "categories",
+            JSON.stringify([...categories, data])
+          );
+        } catch (e) {}
+        return data as Category;
+      }
+    } catch (err) {
+      console.error("createCategory failed:", err);
+    }
+
+    return null;
   };
 
   const updateProduct = async (
@@ -1457,6 +1642,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sales,
         visits,
         products,
+        categories,
         users,
         stores,
         currentShift,
@@ -1485,6 +1671,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getShiftStats,
         loadData,
         refreshVisits,
+        createCategory,
         refreshSales,
         removeVisit,
         storesLoading,

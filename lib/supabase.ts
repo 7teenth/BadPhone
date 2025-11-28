@@ -70,6 +70,7 @@ export interface Visit {
   seller_id?: string
   title: string
   sale_amount: number
+  payment_method?: "cash" | "terminal" | null
   created_at: string
   sale_id?: string | null // Может быть null если продажа не завершена
   seller?: User

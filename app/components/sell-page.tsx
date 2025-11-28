@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useCallback } from "react"
-import { BarcodeScanner } from "./barcode-scanner"
-import { useApp } from "../context/app-context"
-import type { SaleItem } from "@/lib/types"
-import { supabase } from "@/lib/supabase" // ✅ Используем прямое обращение к Supabase
+import type React from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { BarcodeScanner } from "./barcode-scanner";
+import { useApp } from "../context/app-context";
+import type { SaleItem } from "@/lib/types";
+import { supabase } from "@/lib/supabase"; // ✅ Используем прямое обращение к Supabase
 import {
   ArrowLeft,
   Plus,
@@ -19,9 +19,9 @@ import {
   AlertCircle,
   Percent,
   X,
-} from "lucide-react"
-import { DiscountModal } from "./discount-modal"
-import { SaleReceipt } from "./sale-receipt"
+} from "lucide-react";
+import { DiscountModal } from "./discount-modal";
+import { SaleReceipt } from "./sale-receipt";
 
 // Custom components instead of shadcn/ui
 const Button = ({
@@ -33,13 +33,13 @@ const Button = ({
   disabled = false,
   ...props
 }: {
-  children: React.ReactNode
-  onClick?: () => void
-  variant?: "default" | "outline" | "ghost" | "destructive"
-  size?: "default" | "sm" | "icon"
-  className?: string
-  disabled?: boolean
-  [key: string]: any
+  children: React.ReactNode;
+  onClick?: () => void;
+  variant?: "default" | "outline" | "ghost" | "destructive";
+  size?: "default" | "sm" | "icon";
+  className?: string;
+  disabled?: boolean;
+  [key: string]: any;
 }) => (
   <button
     onClick={onClick}
@@ -48,10 +48,10 @@ const Button = ({
       variant === "outline"
         ? "border border-gray-300 bg-white hover:bg-gray-50"
         : variant === "ghost"
-          ? "bg-transparent hover:bg-gray-100"
-          : variant === "destructive"
-            ? "bg-red-600 text-white hover:bg-red-700"
-            : "bg-green-600 text-white hover:bg-green-700"
+        ? "bg-transparent hover:bg-gray-100"
+        : variant === "destructive"
+        ? "bg-red-600 text-white hover:bg-red-700"
+        : "bg-green-600 text-white hover:bg-green-700"
     } ${size === "sm" ? "px-2 py-1 text-sm" : size === "icon" ? "p-2" : ""} ${
       disabled ? "opacity-50 cursor-not-allowed" : ""
     } ${className}`}
@@ -59,153 +59,263 @@ const Button = ({
   >
     {children}
   </button>
-)
+);
 
 const Badge = ({
   children,
   variant = "default",
   className = "",
 }: {
-  children: React.ReactNode
-  variant?: "default" | "secondary" | "outline" | "destructive"
-  className?: string
+  children: React.ReactNode;
+  variant?: "default" | "secondary" | "outline" | "destructive";
+  className?: string;
 }) => (
   <span
     className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
       variant === "secondary"
         ? "bg-gray-100 text-gray-800"
         : variant === "outline"
-          ? "border border-gray-300 text-gray-700"
-          : variant === "destructive"
-            ? "bg-red-100 text-red-800"
-            : "bg-blue-100 text-blue-800"
+        ? "border border-gray-300 text-gray-700"
+        : variant === "destructive"
+        ? "bg-red-100 text-red-800"
+        : "bg-blue-100 text-blue-800"
     } ${className}`}
   >
     {children}
   </span>
-)
+);
 
 const Select = ({
   value,
   onValueChange,
   children,
 }: {
-  value: string
-  onValueChange: (value: string) => void
-  children: React.ReactNode
+  value: string;
+  onValueChange: (value: string) => void;
+  children: React.ReactNode;
 }) => (
   <select
     value={value}
-    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onValueChange(e.target.value)}
+    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+      onValueChange(e.target.value)
+    }
     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
   >
     {children}
   </select>
-)
+);
 
-const SelectTrigger = ({ children }: { children: React.ReactNode }) => <>{children}</>
-const SelectValue = () => null
-const SelectContent = ({ children }: { children: React.ReactNode }) => <>{children}</>
-const SelectItem = ({ value, children }: { value: string; children: React.ReactNode }) => (
-  <option value={value}>{children}</option>
-)
+const SelectTrigger = ({ children }: { children: React.ReactNode }) => (
+  <>{children}</>
+);
+const SelectValue = () => null;
+const SelectContent = ({ children }: { children: React.ReactNode }) => (
+  <>{children}</>
+);
+const SelectItem = ({
+  value,
+  children,
+}: {
+  value: string;
+  children: React.ReactNode;
+}) => <option value={value}>{children}</option>;
 
 const Card = ({
   children,
   className = "",
   onClick,
 }: {
-  children: React.ReactNode
-  className?: string
-  onClick?: () => void
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
 }) => (
-  <div onClick={onClick} className={`bg-white rounded-lg shadow border ${className}`}>
+  <div
+    onClick={onClick}
+    className={`bg-white rounded-lg shadow border ${className}`}
+  >
     {children}
   </div>
-)
+);
 
-const CardContent = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <div className={`p-4 ${className}`}>{children}</div>
-)
+const CardContent = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => <div className={`p-4 ${className}`}>{children}</div>;
 
-const CardHeader = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <div className={`p-4 pb-2 ${className}`}>{children}</div>
-)
+const CardHeader = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => <div className={`p-4 pb-2 ${className}`}>{children}</div>;
 
-const CardTitle = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>
-)
+const CardTitle = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>;
 
 const Input = ({
   className = "",
   onChange,
   ...props
 }: {
-  className?: string
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void
-  [key: string]: any
+  className?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  [key: string]: any;
 }) => (
   <input
     className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${className}`}
     onChange={onChange}
     {...props}
   />
-)
+);
 
-const Separator = ({ className = "" }: { className?: string }) => <hr className={`border-gray-200 my-4 ${className}`} />
+const Separator = ({ className = "" }: { className?: string }) => (
+  <hr className={`border-gray-200 my-4 ${className}`} />
+);
 
 interface SellPageProps {
-  visitId: string
-  onBack: () => void
-  onCreateSale: (visitId: string, saleData: { items_data: SaleItem[]; total_amount: number }) => Promise<{ id: string }>
+  visitId: string;
+  onBack: () => void;
+  onCreateSale: (
+    visitId: string,
+    saleData: {
+      items_data: SaleItem[];
+      total_amount: number;
+      payment_method?: "cash" | "terminal";
+    }
+  ) => Promise<{ id: string }>;
 }
 
-export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProps) {
-  const { products, isOnline, currentUser, currentStore } = useApp()
-  const [cart, setCart] = useState<SaleItem[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "terminal">("cash")
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [showScanner, setShowScanner] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [showDiscountModal, setShowDiscountModal] = useState(false)
-  const [discountAmount, setDiscountAmount] = useState(0)
-  const [discountPercent, setDiscountPercent] = useState(0)
-  const [showReceipt, setShowReceipt] = useState(false)
-  const [lastSaleData, setLastSaleData] = useState<any>(null)
+export default function SellPage({
+  visitId,
+  onBack,
+  onCreateSale,
+}: SellPageProps) {
+  const { products, isOnline, currentUser, currentStore } = useApp();
+  const [cart, setCart] = useState<SaleItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [brandFilter, setBrandFilter] = useState<string>("all");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "terminal">(
+    "cash"
+  );
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [lastSaleData, setLastSaleData] = useState<any>(null);
 
   // Filter products by current store and search term
+  // derive available categories and brands
+  const categories = Array.from(
+    new Set(products.map((p) => p.category))
+  ).filter(Boolean);
+  const brands = Array.from(new Set(products.map((p) => p.brand))).filter(
+    Boolean
+  );
+
   const filteredProducts = products.filter((product) => {
     // First filter by store - only show products from current user's store
-    const belongsToCurrentStore = currentStore ? product.store_id === currentStore.id : true
-    
+    const belongsToCurrentStore = currentStore
+      ? product.store_id === currentStore.id
+      : true;
+
     // Then filter by search term
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.includes(searchTerm))
-    
-    return belongsToCurrentStore && matchesSearch
-  })
+      (product.barcode && product.barcode.includes(searchTerm));
+
+    const matchesCategory =
+      categoryFilter === "all" || product.category === categoryFilter;
+    const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
+
+    return (
+      belongsToCurrentStore && matchesSearch && matchesCategory && matchesBrand
+    );
+  });
+
+  // Suggestions for typeahead
+  const nameSuggestions = Array.from(
+    new Set(
+      products
+        .map((p) => p.name)
+        .filter(Boolean)
+        .filter((n) => n.toLowerCase().startsWith(searchTerm.toLowerCase()))
+    )
+  ).slice(0, 6);
+
+  const brandSuggestions = Array.from(
+    new Set(
+      products
+        .map((p) => p.brand)
+        .filter(Boolean)
+        .filter((b) => b.toLowerCase().startsWith(searchTerm.toLowerCase()))
+    )
+  ).slice(0, 6);
+
+  const modelSuggestions = Array.from(
+    new Set(
+      products
+        .map((p) => p.model)
+        .filter(Boolean)
+        .filter((m) => m.toLowerCase().startsWith(searchTerm.toLowerCase()))
+    )
+  ).slice(0, 6);
+
+  // Keyboard shortcut (Ctrl/Cmd+K) to focus search box
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isK = e.key.toLowerCase() === "k";
+      if ((e.ctrlKey || e.metaKey) && isK) {
+        e.preventDefault();
+        const el = document.getElementById(
+          "sell-search-input"
+        ) as HTMLInputElement | null;
+        if (el) el.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const addToCart = useCallback((product: (typeof products)[0]) => {
     if (product.quantity <= 0) {
-      alert("Товар закінчився на складі")
-      return
+      alert("Товар закінчився на складі");
+      return;
     }
 
     setCart((prev) => {
-      const existingItem = prev.find((item) => item.product_id === product.id)
+      const existingItem = prev.find((item) => item.product_id === product.id);
       if (existingItem) {
-        const newQuantity = existingItem.quantity + 1
+        const newQuantity = existingItem.quantity + 1;
         if (newQuantity > product.quantity) {
-          alert(`Недостатньо товару на складі. Доступно: ${product.quantity}`)
-          return prev
+          alert(`Недостатньо товару на складі. Доступно: ${product.quantity}`);
+          return prev;
         }
         return prev.map((item) =>
-          item.product_id === product.id ? { ...item, quantity: newQuantity, total: newQuantity * item.price } : item,
-        )
+          item.product_id === product.id
+            ? {
+                ...item,
+                quantity: newQuantity,
+                total: newQuantity * item.price,
+              }
+            : item
+        );
       } else {
         return [
           ...prev,
@@ -218,67 +328,72 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
             quantity: 1,
             total: product.price * 1,
           },
-        ]
+        ];
       }
-    })
-  }, [])
+    });
+  }, []);
 
   const updateCartItemQuantity = (productId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
-      removeFromCart(productId)
-      return
+      removeFromCart(productId);
+      return;
     }
 
-    const product = products.find((p) => p.id === productId)
+    const product = products.find((p) => p.id === productId);
     if (product && newQuantity > product.quantity) {
-      alert(`Недостатньо товару на складі. Доступно: ${product.quantity}`)
-      return
+      alert(`Недостатньо товару на складі. Доступно: ${product.quantity}`);
+      return;
     }
 
     setCart((prev) =>
       prev.map((item) =>
-        item.product_id === productId ? { ...item, quantity: newQuantity, total: newQuantity * item.price } : item,
-      ),
-    )
-  }
+        item.product_id === productId
+          ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
+          : item
+      )
+    );
+  };
 
   const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product_id !== productId))
-  }
+    setCart((prev) => prev.filter((item) => item.product_id !== productId));
+  };
 
   const getTotalAmount = () => {
-    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    return subtotal - discountAmount
-  }
+    const subtotal = cart.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+    return subtotal - discountAmount;
+  };
 
   const getSubtotal = () => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  }
+    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  };
 
   const getTotalItems = () => {
-    return cart.reduce((sum, item) => sum + item.quantity, 0)
-  }
+    return cart.reduce((sum, item) => sum + item.quantity, 0);
+  };
 
   const handleCompleteSale = async () => {
-    console.log("🛒 handleCompleteSale вызвана!")
+    console.log("🛒 handleCompleteSale вызвана!");
 
     if (cart.length === 0) {
-      alert("Додайте товари до кошика")
-      return
+      alert("Додайте товари до кошика");
+      return;
     }
 
     if (!isOnline) {
-      alert("Для завершення продажу потрібен інтернет")
-      return
+      alert("Для завершення продажу потрібен інтернет");
+      return;
     }
 
     // Предотвращаем повторные вызовы
     if (isProcessing) {
-      console.log("⚠️ Sale already in progress, ignoring duplicate call")
-      return
+      console.log("⚠️ Sale already in progress, ignoring duplicate call");
+      return;
     }
 
-    setIsProcessing(true)
+    setIsProcessing(true);
     try {
       console.log("🔄 Создаем продажу с параметрами:", {
         visitId,
@@ -286,15 +401,16 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
           items_data: cart,
           total_amount: getTotalAmount(),
         },
-      })
+      });
 
       // Вызываем функцию создания продажи
       const result = await onCreateSale(visitId, {
         items_data: cart,
         total_amount: getTotalAmount(),
-      })
+        payment_method: paymentMethod,
+      });
 
-      console.log("✅ Продажа создана успешно:", result)
+      console.log("✅ Продажа создана успешно:", result);
 
       // Подготавливаем данные для чека в правильном формате
       const receiptData = {
@@ -313,89 +429,98 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
         subtotal: getSubtotal(),
         discountAmount: discountAmount,
         paymentMethod: paymentMethod === "cash" ? "Готівка" : "Термінал",
-      }
+      };
 
-      setLastSaleData(receiptData)
-      setShowReceipt(true)
-      setCart([])
-      setDiscountAmount(0)
-      setDiscountPercent(0)
+      setLastSaleData(receiptData);
+      setShowReceipt(true);
+      setCart([]);
+      setDiscountAmount(0);
+      setDiscountPercent(0);
     } catch (error) {
-      console.error("❌ Error completing sale:", error)
-      alert("Помилка при завершенні продажу: " + (error as Error).message)
+      console.error("❌ Error completing sale:", error);
+      alert("Помилка при завершенні продажу: " + (error as Error).message);
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
   const handleBarcodeDetected = (barcode: string) => {
-    const product = products.find((p) => p.barcode === barcode)
+    const product = products.find((p) => p.barcode === barcode);
     if (product) {
-      addToCart(product)
-      setShowScanner(false)
+      addToCart(product);
+      setShowScanner(false);
     } else {
-      alert("Товар з таким штрих-кодом не знайдено")
+      alert("Товар з таким штрих-кодом не знайдено");
     }
-  }
+  };
 
   // ✅ ИСПРАВЛЕННАЯ функция возврата с прямым обращением к Supabase
   const handleBack = async () => {
-    if (isDeleting) return
+    if (isDeleting) return;
 
     if (visitId) {
       try {
-        setIsDeleting(true)
-        console.log("🗑️ Deleting visit via Supabase:", visitId)
+        setIsDeleting(true);
+        console.log("🗑️ Deleting visit via Supabase:", visitId);
 
         // ✅ Используем прямое обращение к Supabase вместо API роута
-        const { error } = await supabase.from("visits").delete().eq("id", visitId)
+        const { error } = await supabase
+          .from("visits")
+          .delete()
+          .eq("id", visitId);
 
         if (error) {
-          console.error("❌ Error deleting visit:", error)
-          alert("Не вдалося видалити візит. Спробуйте пізніше.")
-          return
+          console.error("❌ Error deleting visit:", error);
+          alert("Не вдалося видалити візит. Спробуйте пізніше.");
+          return;
         }
 
-        console.log("✅ Visit deleted successfully")
+        console.log("✅ Visit deleted successfully");
       } catch (error) {
-        console.error("❌ Error deleting visit:", error)
-        alert("Не вдалося видалити візит. Спробуйте пізніше.")
-        return
+        console.error("❌ Error deleting visit:", error);
+        alert("Не вдалося видалити візит. Спробуйте пізніше.");
+        return;
       } finally {
-        setIsDeleting(false)
+        setIsDeleting(false);
       }
     }
-    onBack()
-  }
+    onBack();
+  };
 
   const handleNewSale = () => {
-    setShowReceipt(false)
-    setLastSaleData(null)
-    setCart([])
-    setDiscountAmount(0)
-    setPaymentMethod("cash")
-  }
+    setShowReceipt(false);
+    setLastSaleData(null);
+    setCart([]);
+    setDiscountAmount(0);
+    setPaymentMethod("cash");
+  };
 
   const handleApplyDiscount = (amount: number, percent: number) => {
-    setDiscountAmount(amount)
-    setDiscountPercent(percent)
-    setShowDiscountModal(false)
-  }
+    setDiscountAmount(amount);
+    setDiscountPercent(percent);
+    setShowDiscountModal(false);
+  };
 
   const handleRemoveDiscount = () => {
-    setDiscountAmount(0)
-    setDiscountPercent(0)
-  }
+    setDiscountAmount(0);
+    setDiscountPercent(0);
+  };
 
   const handleReceiptClose = () => {
-    setShowReceipt(false)
-    setLastSaleData(null)
-    onBack()
-  }
+    setShowReceipt(false);
+    setLastSaleData(null);
+    onBack();
+  };
 
   // Если показываем чек, рендерим только его
   if (showReceipt && lastSaleData) {
-    return <SaleReceipt sale={lastSaleData} onNewSale={handleNewSale} onBack={handleReceiptClose} />
+    return (
+      <SaleReceipt
+        sale={lastSaleData}
+        onNewSale={handleNewSale}
+        onBack={handleReceiptClose}
+      />
+    );
   }
 
   return (
@@ -418,11 +543,16 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
           </Badge>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-green-600 text-white border-green-600">
+          <Badge
+            variant="outline"
+            className="bg-green-600 text-white border-green-600"
+          >
             <ShoppingCart className="h-3 w-3 mr-1" />
             {getTotalItems()} товарів
           </Badge>
-          <div className="text-lg font-bold">{getTotalAmount().toLocaleString()} ₴</div>
+          <div className="text-lg font-bold">
+            {getTotalAmount().toLocaleString()} ₴
+          </div>
         </div>
       </header>
 
@@ -432,18 +562,129 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
           {/* Search and Scanner */}
           <Card>
             <CardContent className="p-4">
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-col sm:flex-row">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
+                    id="sell-search-input"
                     type="search"
                     placeholder="Пошук товарів за назвою, брендом, моделлю або штрих-кодом..."
                     value={searchTerm}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSearchTerm(e.target.value)
+                    }
                     className="pl-10"
                   />
+                  {/* Shortcut hint */}
+                  <div className="absolute right-3 top-2 text-xs text-gray-400 hidden sm:block">
+                    ⌘/Ctrl+K
+                  </div>
+
+                  {/* Suggestions dropdown */}
+                  {searchTerm.trim().length > 0 && (
+                    <div className="absolute left-0 mt-2 w-full bg-white border rounded shadow z-20 text-sm p-2">
+                      {nameSuggestions.length > 0 && (
+                        <div className="mb-2">
+                          <div className="text-xs text-gray-500 px-2">
+                            Назви
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {nameSuggestions.map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setSearchTerm(s)}
+                                className="px-2 py-1 text-xs border rounded bg-gray-100 hover:bg-gray-200"
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {brandSuggestions.length > 0 && (
+                        <div className="mb-2">
+                          <div className="text-xs text-gray-500 px-2">
+                            Бренди
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {brandSuggestions.map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => {
+                                  setSearchTerm(s);
+                                  setBrandFilter(s);
+                                }}
+                                className="px-2 py-1 text-xs border rounded bg-gray-100 hover:bg-gray-200"
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {modelSuggestions.length > 0 && (
+                        <div className="mb-1">
+                          <div className="text-xs text-gray-500 px-2">
+                            Моделі
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {modelSuggestions.map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setSearchTerm(s)}
+                                className="px-2 py-1 text-xs border rounded bg-gray-100 hover:bg-gray-200"
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <Button variant="outline" onClick={() => setShowScanner(true)} className="px-3">
+                <div className="w-full max-w-xs sm:max-w-none sm:w-48 flex items-center gap-2">
+                  <Select
+                    value={categoryFilter}
+                    onValueChange={setCategoryFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Усі категорії</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={brandFilter} onValueChange={setBrandFilter}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Усі бренди</SelectItem>
+                      {brands.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {b}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowScanner(true)}
+                  className="px-3"
+                >
                   <Package className="h-4 w-4" />
                 </Button>
               </div>
@@ -455,8 +696,12 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
             {filteredProducts.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-600 mb-2">Товари не знайдено</h3>
-                <p className="text-gray-500">Спробуйте змінити критерії пошуку</p>
+                <h3 className="text-xl font-medium text-gray-600 mb-2">
+                  Товари не знайдено
+                </h3>
+                <p className="text-gray-500">
+                  Спробуйте змінити критерії пошуку
+                </p>
               </div>
             ) : (
               filteredProducts.map((product) => (
@@ -470,10 +715,16 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                   <CardContent className="p-3">
                     <div className="space-y-2">
                       <div className="flex justify-between items-start gap-2">
-                        <h3 className="font-medium text-sm line-clamp-2 flex-1">{product.name}</h3>
+                        <h3 className="font-medium text-sm line-clamp-2 flex-1">
+                          {product.name}
+                        </h3>
                         <Badge
                           variant={
-                            product.quantity > 10 ? "default" : product.quantity > 0 ? "secondary" : "destructive"
+                            product.quantity > 10
+                              ? "default"
+                              : product.quantity > 0
+                              ? "secondary"
+                              : "destructive"
                           }
                           className="text-xs shrink-0"
                         >
@@ -484,7 +735,9 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                         {product.brand} {product.model}
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-lg font-bold text-green-600">{product.price.toLocaleString()} ₴</span>
+                        <span className="text-lg font-bold text-green-600">
+                          {product.price.toLocaleString()} ₴
+                        </span>
                         {product.quantity <= 0 && (
                           <span className="text-xs text-red-600 flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" />
@@ -519,24 +772,43 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
               ) : (
                 <div className="space-y-3">
                   {cart.map((item) => (
-                    <div key={item.product_id} className="flex items-start gap-3 p-3 border rounded-lg bg-gray-50">
+                    <div
+                      key={item.product_id}
+                      className="flex items-start gap-3 p-3 border rounded-lg bg-gray-50"
+                    >
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm leading-tight mb-1">{item.product_name}</h4>
+                        <h4 className="font-medium text-sm leading-tight mb-1">
+                          {item.product_name}
+                        </h4>
                         <p className="text-xs text-gray-600 mb-1">
                           {item.brand} {item.model}
                         </p>
-                        <p className="text-sm font-medium text-green-600">{item.price.toLocaleString()} ₴</p>
+                        <p className="text-sm font-medium text-green-600">
+                          {item.price.toLocaleString()} ₴
+                        </p>
                       </div>
                       <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 p-1">
                         <button
-                          onClick={() => updateCartItemQuantity(item.product_id, item.quantity - 1)}
+                          onClick={() =>
+                            updateCartItemQuantity(
+                              item.product_id,
+                              item.quantity - 1
+                            )
+                          }
                           className="h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
                         >
                           <Minus className="h-3 w-3 text-gray-600" />
                         </button>
-                        <span className="w-10 text-center text-sm font-medium text-gray-900">{item.quantity}</span>
+                        <span className="w-10 text-center text-sm font-medium text-gray-900">
+                          {item.quantity}
+                        </span>
                         <button
-                          onClick={() => updateCartItemQuantity(item.product_id, item.quantity + 1)}
+                          onClick={() =>
+                            updateCartItemQuantity(
+                              item.product_id,
+                              item.quantity + 1
+                            )
+                          }
                           className="h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
                         >
                           <Plus className="h-3 w-3 text-gray-600" />
@@ -565,7 +837,12 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
             </CardHeader>
             <CardContent className="p-4 space-y-3">
               <div className="relative">
-                <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as "cash" | "terminal")}>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(value) =>
+                    setPaymentMethod(value as "cash" | "terminal")
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -582,7 +859,11 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                 disabled={cart.length === 0}
               >
                 <Percent className="h-4 w-4" />
-                <span>{discountAmount > 0 ? `Знижка: ${discountPercent.toFixed(1)}%` : "Додати знижку"}</span>
+                <span>
+                  {discountAmount > 0
+                    ? `Знижка: ${discountPercent.toFixed(1)}%`
+                    : "Додати знижку"}
+                </span>
               </Button>
             </CardContent>
           </Card>
@@ -598,13 +879,17 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Сума товарів:</span>
-                    <span className="font-medium">{getSubtotal().toLocaleString()} ₴</span>
+                    <span className="font-medium">
+                      {getSubtotal().toLocaleString()} ₴
+                    </span>
                   </div>
                   {discountAmount > 0 && (
                     <div className="flex justify-between items-center text-red-600">
                       <span>Знижка ({discountPercent.toFixed(1)}%):</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">-{discountAmount.toLocaleString()} ₴</span>
+                        <span className="font-medium">
+                          -{discountAmount.toLocaleString()} ₴
+                        </span>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -620,8 +905,12 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
 
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold text-gray-900">До сплати:</span>
-                    <span className="text-xl font-bold text-green-600">{getTotalAmount().toLocaleString()} ₴</span>
+                    <span className="text-lg font-semibold text-gray-900">
+                      До сплати:
+                    </span>
+                    <span className="text-xl font-bold text-green-600">
+                      {getTotalAmount().toLocaleString()} ₴
+                    </span>
                   </div>
                 </div>
 
@@ -677,5 +966,5 @@ export default function SellPage({ visitId, onBack, onCreateSale }: SellPageProp
         onApplyDiscount={handleApplyDiscount}
       />
     </div>
-  )
+  );
 }

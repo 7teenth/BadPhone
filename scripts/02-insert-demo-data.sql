@@ -34,7 +34,7 @@ INSERT INTO sales (store_id, seller_id, receipt_number, total_amount, payment_me
     ('550e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440022', 'RCP-003', 1880.00, 'cash', '[{"id": 6, "name": "Чохол Samsung Galaxy S24", "price": 380, "cartQuantity": 1}, {"id": 7, "name": "Бездротова зарядка iPhone", "price": 1500, "cartQuantity": 1}]', NOW() - INTERVAL '3 hours');
 
 -- Вставка демо визитов
-INSERT INTO visits (store_id, seller_id, title, sale_amount, created_at) VALUES 
-    ('550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440012', 'Візит 1', 1730.00, NOW() - INTERVAL '1 day'),
-    ('550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440012', 'Візит 2', 8500.00, NOW() - INTERVAL '2 hours'),
-    ('550e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440022', 'Візит 1', 1880.00, NOW() - INTERVAL '3 hours');
+INSERT INTO visits (store_id, seller_id, title, sale_amount, created_at, payment_method) VALUES 
+    ('550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440012', 'Візит 1', 1730.00, NOW() - INTERVAL '1 day', 'cash'),
+    ('550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440012', 'Візит 2', 8500.00, NOW() - INTERVAL '2 hours', 'terminal'),
+    ('550e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440022', 'Візит 1', 1880.00, NOW() - INTERVAL '3 hours', 'cash');
