@@ -5,6 +5,12 @@ import { supabase } from "@/lib/supabase";
 
 type Props = { params: { id: string } };
 
+// Для статического экспорта: укажем все доступные id
+export async function generateStaticParams() {
+  const { data: sales } = await supabase.from("sales").select("id");
+  return (sales || []).map((sale) => ({ id: sale.id }));
+}
+
 export default async function Page({ params }: Props) {
   const id = params.id;
 

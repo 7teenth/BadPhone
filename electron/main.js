@@ -297,12 +297,10 @@ function showWhatsNewIfUpdated() {
       dialog.showMessageBox(mainWindow, {
         type: "info",
         buttons: ["OK"],
-        title: `🎃 What's New in v${currentVersion}`,
+        title: `What's New in v${currentVersion}`,
         message: `Привет! У вас новая версия: v${currentVersion}`,
         detail:
-`• Fixed work shift bug
-• Users can no longer log in to the same profile on multiple stores
-• Added Halloween theme! 👻`
+`• Fixed work shift bug`
       });
     }
   }
