@@ -22,7 +22,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useApp } from "../context/app-context";
-import { BarcodeScanner } from "./barcode-scanner";
 
 // ---------------- Типы ----------------
 interface Product {
@@ -339,7 +338,6 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
                 ✕
               </Button>
             </div>
-            <BarcodeScanner onBarcodeDetected={handleBarcodeDetected} />
           </div>
         </div>
       )}

@@ -2,7 +2,6 @@
 
 import type React from "react";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { BarcodeScanner } from "./barcode-scanner";
 import { useApp } from "../context/app-context";
 import type { SaleItem } from "@/lib/types";
 import { supabase } from "@/lib/supabase"; // ✅ Используем прямое обращение к Supabase
@@ -592,7 +591,7 @@ export default function SellPage({
                   <Input
                     id="sell-search-input"
                     type="search"
-                    placeholder="Пошук товарів за назвою, брендом, моделлю або штрих-кодом..."
+                    placeholder="Пошук товарів..."
                     value={searchTerm}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setSearchTerm(e.target.value)
@@ -672,45 +671,6 @@ export default function SellPage({
                     </div>
                   )}
                 </div>
-                <div className="w-full max-w-xs sm:max-w-none sm:w-48 flex items-center gap-2">
-                  <Select
-                    value={categoryFilter}
-                    onValueChange={setCategoryFilter}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Усі категорії</SelectItem>
-                      {categories.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={brandFilter} onValueChange={setBrandFilter}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Усі бренди</SelectItem>
-                      {brands.map((b) => (
-                        <SelectItem key={b} value={b}>
-                          {b}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowScanner(true)}
-                  className="px-3"
-                >
-                  <Package className="h-4 w-4" />
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -966,22 +926,6 @@ export default function SellPage({
           </Card>
         </div>
       </div>
-
-      {/* Barcode Scanner Modal */}
-      {showScanner && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Сканування штрих-коду</h3>
-              <Button variant="ghost" onClick={() => setShowScanner(false)}>
-                ✕
-              </Button>
-            </div>
-            <BarcodeScanner onBarcodeDetected={handleBarcodeDetected} />
-          </div>
-        </div>
-      )}
-
       {/* Discount Modal */}
       <DiscountModal
         isOpen={showDiscountModal}
