@@ -531,7 +531,7 @@ export default function LoginPage() {
 
           <div className="pt-4 border-t border-white/10 text-center">
             <p className="text-xs text-white/30">
-              Версія 1.0.3 &bull; 2025 BadPhone
+              Версія 1.0.5 &bull; 2025 BadPhone
             </p>
           </div>
         </CardContent>

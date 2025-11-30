@@ -33,6 +33,7 @@ import { UsersManagement } from "./components/users-management";
 import { supabase } from "@/lib/supabase";
 import type { Visit } from "@/lib/supabase";
 import { ShiftStatsModal } from "./components/shift-stats-modal";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import ProductDetailModal from "./components/product-detail-modal";
 import Header from "@/components/ui/header";
 
@@ -201,7 +202,6 @@ export default function MainPage() {
     if (!isShiftActive) return;
 
     const interval = setInterval(() => {
-      console.log("🔄 Auto-updating shift stats...");
       setStatsUpdateTrigger((prev) => prev + 1);
     }, 30000);
 
@@ -349,12 +349,10 @@ export default function MainPage() {
 
     const now = Date.now();
     if (now - lastVisitCreationTime.current < 2000) {
-      console.log("⚠️ Visit creation blocked - too soon after last creation");
       throw new Error("Зачекайте перед створенням нового візиту");
     }
 
     if (isCreatingVisit) {
-      console.log("⚠️ Visit creation already in progress");
       throw new Error("Візит вже створюється");
     }
 
@@ -362,8 +360,6 @@ export default function MainPage() {
     lastVisitCreationTime.current = now;
 
     try {
-      console.log("🔄 Creating new visit...");
-
       // ✅ Используем прямое обращение к Supabase вместо API роута
       const { count: existingVisitsCount } = await supabase
         .from("visits")
@@ -392,9 +388,6 @@ export default function MainPage() {
           "Помилка створення візиту: " + (error?.message ?? "Unknown error")
         );
       }
-
-      console.log("✅ Visit created successfully:", data.id);
-
       // ✅ Обновляем данные через контекст
       if (refreshVisits) {
         await refreshVisits();
@@ -409,6 +402,13 @@ export default function MainPage() {
     }
   };
 
+  // Create a visit and set it as active in this page state (used when user clicks "New sale")
+  const createAndSetActiveVisit = async (): Promise<string> => {
+    const id = await createVisit();
+    setActiveVisitId(id);
+    return id;
+  };
+
   // ✅ ИСПРАВЛЕННАЯ функция создания продажи
   async function createSaleAndLinkVisit(
     visitId: string,
@@ -418,20 +418,16 @@ export default function MainPage() {
       payment_method?: "cash" | "terminal";
     }
   ): Promise<{ id: string }> {
-    console.log("🚀 createSaleAndLinkVisit called!");
-
     if (!currentStore || !currentUser) {
       throw new Error("Не вибрано магазин або користувача");
     }
 
     const now = Date.now();
     if (now - lastSaleCreationTime.current < 3000) {
-      console.log("⚠️ Sale creation blocked - too soon after last creation");
       throw new Error("Зачекайте перед створенням нової продажі");
     }
 
     if (isCreatingSale) {
-      console.log("⚠️ Sale creation already in progress");
       throw new Error("Продаж вже створюється");
     }
 
@@ -447,11 +443,8 @@ export default function MainPage() {
     lastSaleCreationTime.current = now;
 
     const receipt_number = generateReceiptNumber();
-    console.log("🧾 Generated receipt number:", receipt_number);
 
     try {
-      console.log("🔄 Creating sale...");
-
       // Создаем продажу через контекст с корректным payment_method
       await addSale({
         receipt_number,
@@ -461,13 +454,10 @@ export default function MainPage() {
         seller_id: currentUser.id,
       });
 
-      console.log("✅ Sale created successfully!");
-
       // Небольшая задержка для обеспечения записи в БД
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Ищем созданную продажу
-      console.log("🔍 Finding created sale...");
       const { data: createdSale, error: findError } = await supabase
         .from("sales")
         .select("id, payment_method")
@@ -484,11 +474,7 @@ export default function MainPage() {
             (findError?.message ?? "Unknown error")
         );
       }
-
-      console.log("✅ Found created sale with ID:", createdSale.id);
-
       // Связываем визит с продажей
-      console.log("🔗 Linking visit with sale...");
       const { error: visitError } = await supabase
         .from("visits")
         .update({
@@ -503,14 +489,11 @@ export default function MainPage() {
         throw new Error("Помилка оновлення візиту: " + visitError.message);
       }
 
-      console.log("✅ Visit linked with sale successfully!");
-
       // ✅ Обновляем все данные через контекст
       if (refreshVisits) {
         await refreshVisits();
       }
 
-      console.log("🎉 createSaleAndLinkVisit completed successfully!");
       return { id: createdSale.id };
     } catch (error) {
       console.error("❌ Error in createSaleAndLinkVisit:", error);
@@ -521,14 +504,11 @@ export default function MainPage() {
   }
 
   const handleSell = async () => {
-    console.log("🛒 handleSell called");
-
     if (!isShiftActive) {
       startShift();
     }
 
     if (isCreatingVisit) {
-      console.log("⚠️ Visit creation already in progress, ignoring click");
       return;
     }
 
@@ -550,8 +530,6 @@ export default function MainPage() {
 
   // ✅ ИСПРАВЛЕННАЯ функция возврата на главную с обновлением данных
   const handleBackToMain = async () => {
-    console.log("🏠 Returning to main page...");
-
     setCurrentPage("main");
     setActiveVisitId(null);
 
@@ -560,11 +538,9 @@ export default function MainPage() {
       try {
         if (refreshVisits) {
           await refreshVisits();
-          console.log("✅ Visits refreshed successfully");
         }
         if (refreshSales) {
           await refreshSales();
-          console.log("✅ Sales refreshed successfully");
         }
       } catch (error) {
         console.error("❌ Error refreshing data:", error);
@@ -594,13 +570,7 @@ export default function MainPage() {
   };
 
   const calculateCurrentShiftStats = () => {
-    console.log(
-      "📊 Calculating shift stats at:",
-      new Date().toLocaleTimeString()
-    );
-
     if (!isShiftActive || !sales || !Array.isArray(sales)) {
-      console.log("❌ No active shift or sales data");
       return null;
     }
 
@@ -610,8 +580,6 @@ export default function MainPage() {
       today.getMonth(),
       today.getDate()
     );
-
-    console.log("🔍 Filtering sales for current shift...");
     const shiftSales = sales.filter((sale) => {
       if (!sale || !sale.created_at) return false;
 
@@ -636,13 +604,6 @@ export default function MainPage() {
         return false;
       }
     });
-
-    console.log("📊 Filtered sales for shift:", shiftSales.length);
-    console.log(
-      "💰 Sales amounts:",
-      shiftSales.map((s) => s.total_amount)
-    );
-    console.log("🕐 Current shift start:", currentShift?.start_time);
 
     const totalAmount = shiftSales.reduce(
       (sum, sale) => sum + (sale.total_amount || 0),
@@ -683,7 +644,6 @@ export default function MainPage() {
       avgCheck,
     };
 
-    console.log("✅ Calculated shift stats:", stats);
     return stats;
   };
 
@@ -704,6 +664,7 @@ export default function MainPage() {
           visitId={activeVisitId ?? ""}
           onBack={handleBackToMain}
           onCreateSale={createSaleAndLinkVisit}
+          onCreateVisit={createAndSetActiveVisit}
         />
       );
     case "find":
@@ -875,7 +836,7 @@ export default function MainPage() {
                       </div>
                       <div className="text-center py-2">
                         <div className="text-2xl font-bold text-green-400">
-                          {(visit.sale_amount || 0).toLocaleString()} ₴
+                          {formatCurrency(visit.sale_amount || 0)}
                         </div>
                         <div className="mt-2 flex items-center justify-center gap-2">
                           {visit.payment_method ? (
@@ -939,7 +900,7 @@ export default function MainPage() {
                 </div>
                 <div className="text-center p-3 bg-white rounded-lg shadow-sm">
                   <div className="text-2xl font-bold text-green-600">
-                    {(shiftStats.totalAmount || 0).toLocaleString()} ₴
+                    {formatCurrency(shiftStats.totalAmount || 0)}
                   </div>
                   <div className="text-sm text-gray-600">Загальна сума</div>
                 </div>
@@ -959,7 +920,7 @@ export default function MainPage() {
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div className="text-center p-3 bg-white rounded-lg shadow-sm">
                   <div className="text-lg font-bold text-orange-600">
-                    {(shiftStats.cashAmount || 0).toLocaleString()} ₴
+                    {formatCurrency(shiftStats.cashAmount || 0)}
                   </div>
                   <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                     <Banknote className="h-4 w-4" />
@@ -968,7 +929,7 @@ export default function MainPage() {
                 </div>
                 <div className="text-center p-3 bg-white rounded-lg shadow-sm">
                   <div className="text-lg font-bold text-indigo-600">
-                    {(shiftStats.terminalAmount || 0).toLocaleString()} ₴
+                    {formatCurrency(shiftStats.terminalAmount || 0)}
                   </div>
                   <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                     <CreditCard className="h-4 w-4" />
@@ -1016,7 +977,7 @@ export default function MainPage() {
                         </span>
                       </div>
                       <div className="text-xs text-gray-500">
-                        {new Date(saleMeta.created_at).toLocaleString("uk-UA")}
+                        {formatDateTime(saleMeta.created_at)}
                       </div>
                     </div>
                     <div className="mt-2 flex items-center gap-3">
@@ -1040,7 +1001,7 @@ export default function MainPage() {
                       </div>
                       <div className="ml-auto text-sm font-semibold text-green-700">
                         Сума:{" "}
-                        {Number(saleMeta.total_amount || 0).toLocaleString()} ₴
+                        {formatCurrency(Number(saleMeta.total_amount || 0))}
                       </div>
                     </div>
                   </div>
@@ -1074,7 +1035,7 @@ export default function MainPage() {
                             </div>
                             <div className="text-right">
                               <div className="text-sm font-semibold text-green-600">
-                                {(item.price || 0).toLocaleString()} ₴
+                                {formatCurrency(item.price || 0)}
                               </div>
                               {item.product_id && products && (
                                 <div className="text-xs text-gray-500 mt-1">

@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { DiscountModal } from "./discount-modal";
-import { SaleReceipt } from "./sale-receipt";
+import SaleReceipt from "@/app/components/sale-receipt";
 
 // Custom components instead of shadcn/ui
 const Button = ({
@@ -192,12 +192,14 @@ interface SellPageProps {
       payment_method?: "cash" | "terminal";
     }
   ) => Promise<{ id: string }>;
+  onCreateVisit?: () => Promise<string>;
 }
 
 export default function SellPage({
   visitId,
   onBack,
   onCreateSale,
+  onCreateVisit,
 }: SellPageProps) {
   const { products, isOnline, currentUser, currentStore } = useApp();
   const [cart, setCart] = useState<SaleItem[]>([]);
@@ -375,60 +377,72 @@ export default function SellPage({
   };
 
   const handleCompleteSale = async () => {
-    console.log("🛒 handleCompleteSale вызвана!");
-
-    if (cart.length === 0) {
-      alert("Додайте товари до кошика");
-      return;
-    }
-
-    if (!isOnline) {
-      alert("Для завершення продажу потрібен інтернет");
-      return;
-    }
-
-    // Предотвращаем повторные вызовы
-    if (isProcessing) {
-      console.log("⚠️ Sale already in progress, ignoring duplicate call");
-      return;
-    }
+    if (cart.length === 0 || !isOnline || isProcessing) return;
 
     setIsProcessing(true);
     try {
-      console.log("🔄 Создаем продажу с параметрами:", {
-        visitId,
-        saleData: {
-          items_data: cart,
-          total_amount: getTotalAmount(),
-        },
+      const totalAmount = getTotalAmount();
+      const subtotalAmount = getSubtotal();
+
+      // Normalize items and prepare payload for creation
+      const normalizedItems = cart.map((item) => {
+        const product = products.find((p) => p.id === item.product_id);
+
+        const name =
+          item.product_name ||
+          product?.name ||
+          `Товар ${item.product_id ?? ""}`;
+        const brand = item.brand || product?.brand || "";
+        const quantity = item.quantity ?? 1;
+        const price = item.price ?? product?.price ?? 0;
+        const model = item.model || product?.model || "";
+        const total = item.total ?? price * quantity;
+
+        return {
+          id: item.product_id,
+          name,
+          brand,
+          quantity,
+          price,
+          total,
+          model,
+        };
       });
 
-      // Вызываем функцию создания продажи
       const result = await onCreateSale(visitId, {
-        items_data: cart,
-        total_amount: getTotalAmount(),
+        items_data: normalizedItems.map((it) => ({
+          product_id: it.id,
+          product_name: it.name,
+          brand: it.brand,
+          quantity: it.quantity,
+          price: it.price,
+          total: it.total,
+          model: it.model,
+        })),
+        total_amount: totalAmount,
         payment_method: paymentMethod,
       });
 
-      console.log("✅ Продажа создана успешно:", result);
+      const paymentMethodsMap: Record<"cash" | "terminal", string> = {
+        cash: "Готівка",
+        terminal: "Термінал",
+      };
 
-      // Подготавливаем данные для чека в правильном формате
+      const payment_cash = paymentMethod === "cash" ? totalAmount : 0;
+      const payment_card = paymentMethod === "terminal" ? totalAmount : 0;
+
+      // normalizedItems already prepared above and will be used for receipt
+
       const receiptData = {
         id: result.id,
         receiptNumber: `RCPT-${Date.now()}`,
-        date: new Date(),
-        items: cart.map((item) => ({
-          id: item.product_id,
-          name: item.product_name,
-          brand: item.brand || "",
-          model: item.model || "",
-          price: item.price,
-          cartQuantity: item.quantity,
-        })),
-        total: getTotalAmount(),
-        subtotal: getSubtotal(),
-        discountAmount: discountAmount,
-        paymentMethod: paymentMethod === "cash" ? "Готівка" : "Термінал",
+        created_at: new Date().toISOString(),
+        items: normalizedItems,
+        total: totalAmount,
+        subtotal: subtotalAmount,
+        paymentMethod: paymentMethodsMap[paymentMethod],
+        payment_cash,
+        payment_card,
       };
 
       setLastSaleData(receiptData);
@@ -437,8 +451,7 @@ export default function SellPage({
       setDiscountAmount(0);
       setDiscountPercent(0);
     } catch (error) {
-      console.error("❌ Error completing sale:", error);
-      alert("Помилка при завершенні продажу: " + (error as Error).message);
+      console.error(error);
     } finally {
       setIsProcessing(false);
     }
@@ -487,7 +500,18 @@ export default function SellPage({
     onBack();
   };
 
-  const handleNewSale = () => {
+  const handleNewSale = async () => {
+    // create a new visit for the next sale if parent provided the handler
+    if (typeof onCreateVisit === "function") {
+      try {
+        await onCreateVisit();
+      } catch (err: any) {
+        console.error("Failed to create new visit:", err);
+        alert("Не вдалося створити новий візит. Спробуйте ще раз.");
+        return;
+      }
+    }
+
     setShowReceipt(false);
     setLastSaleData(null);
     setCart([]);

@@ -1,7 +1,7 @@
 {
     "name": "bad-phone",
-    "version": "1.0.3",
-    "description": "PWA Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚вЂќР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В¶Р В Р Р‹Р Р†Р вЂљРІР‚СљР В Р’В Р В РІР‚В ",
+    "version": "1.0.5",
+    "description": "PWA Point of Sale application for small and medium businesses.",
     "author": "Nikita Karvatskyi",
     "private": true,
     "main": "electron/main.js",
@@ -17,7 +17,8 @@
         "dist": "npm run clean && npm run build:static && electron-builder --publish=never",
         "start": "electron .",
         "migrate": "node ./scripts/run-migrations.js",
-        "e2e:terminal-sale": "node ./scripts/e2e-simulate-terminal-sale.js"
+        "e2e:terminal-sale": "node ./scripts/e2e-simulate-terminal-sale.js",
+        "export": "next export"
     },
     "dependencies": {
         "@hookform/resolvers": "^3.9.1",
@@ -64,6 +65,7 @@
         "lucide-react": "^0.454.0",
         "next": "15.2.4",
         "next-themes": "^0.4.4",
+        "qrcode": "^1.5.4",
         "react": "^18.3.1",
         "react-confetti-explosion": "^3.0.3",
         "react-day-picker": "^8.10.1",

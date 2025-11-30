@@ -1,7 +1,7 @@
 "use client";
 
-import type React from "react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,9 +15,23 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApp } from "../context/app-context";
 
+export interface Product {
+  id?: string;
+  product_id?: string;
+  name: string;
+  category: string;
+  price: number;
+  quantity: number;
+  description?: string;
+  brand: string;
+  model: string;
+  barcode?: string | null;
+  store_id?: string | null;
+}
+
 interface ProductFormProps {
-  product?: any;
-  onSubmit: (productData: any) => void;
+  product?: Partial<Product>;
+  onSubmit: (productData: Product) => void;
   onCancel: () => void;
 }
 
@@ -39,131 +53,205 @@ export function ProductForm({ product, onSubmit, onCancel }: ProductFormProps) {
     brand: "",
     model: "",
     barcode: "",
-    store_id: "",
+    store_id: currentUser?.store_id ?? "",
   });
 
+  const [loaded, setLoaded] = useState(false);
+
   useEffect(() => {
-    if (product) {
-      setFormData({
-        name: product.name || "",
-        category: product.category || "",
-        price: product.price?.toString() || "",
-        quantity: product.quantity?.toString() || "",
-        description: product.description || "",
-        brand: product.brand || "",
-        model: product.model || "",
-        barcode: product.barcode || "",
-        store_id: product.store_id || "",
-      });
-    } else {
-      // Для нового товара устанавливаем магазин по умолчанию
-      setFormData((prev) => ({
-        ...prev,
-        store_id: currentUser?.store_id || "",
-      }));
-    }
-  }, [product, currentUser]);
+    const loadProduct = async () => {
+      let defaults: Partial<typeof formData> = {};
+      try {
+        const raw = localStorage.getItem("lastProductDefaults");
+        if (raw) defaults = JSON.parse(raw);
+      } catch {}
 
-  // Derived lists for categories, brands, models
+      if (!product) {
+        setFormData((prev) => ({ ...prev, ...defaults }));
+        setLoaded(true);
+        return;
+      }
+
+      const productId = product.id ?? (product as any).product_id;
+
+      let fullProduct: Partial<Product> | undefined = products.find(
+        (p) => p.id === productId
+      );
+
+      if (!fullProduct && productId) {
+        try {
+          const { data: dbProduct } = await supabase
+            .from("products")
+            .select("*")
+            .eq("id", productId)
+            .maybeSingle();
+          fullProduct = dbProduct ?? product;
+        } catch {
+          fullProduct = product;
+        }
+      }
+
+      if (fullProduct) {
+        setFormData({
+          name: fullProduct.name ?? "",
+          category: fullProduct.category ?? "",
+          price: fullProduct.price != null ? fullProduct.price.toString() : "",
+          quantity:
+            fullProduct.quantity != null ? fullProduct.quantity.toString() : "",
+          description: fullProduct.description ?? "",
+          brand: fullProduct.brand ?? "",
+          model: fullProduct.model ?? "",
+          barcode: fullProduct.barcode ?? "",
+          store_id: fullProduct.store_id ?? currentUser?.store_id ?? "",
+        });
+      } else {
+        setFormData((prev) => ({ ...prev, ...defaults }));
+      }
+
+      setLoaded(true);
+    };
+
+    loadProduct();
+  }, [product, products, currentUser]);
+
+  if (!loaded) return <p>Завантаження продукту...</p>;
+
   const knownCategories = Array.from(
-    new Set((products || []).map((p: any) => p.category))
-  ).filter(Boolean);
+    new Set(products.map((p) => p.category))
+  ).filter(Boolean) as string[];
+  const knownBrands = Array.from(new Set(products.map((p) => p.brand))).filter(
+    Boolean
+  ) as string[];
+  const knownModels = Array.from(new Set(products.map((p) => p.model))).filter(
+    Boolean
+  ) as string[];
 
-  const knownBrands = Array.from(
-    new Set((products || []).map((p: any) => p.brand))
-  ).filter(Boolean);
-
-  const knownModels = Array.from(
-    new Set((products || []).map((p: any) => p.model))
-  ).filter(Boolean);
-
-  // Filtered suggestions for typeahead buttons
-  const brandQuery = formData.brand.trim().toLowerCase();
-  const modelQuery = formData.model.trim().toLowerCase();
+  const brandQuery = formData.brand.toLowerCase().trim();
+  const modelQuery = formData.model.toLowerCase().trim();
 
   const brandSuggestions = knownBrands
-    .filter(Boolean)
-    .filter(
-      (b) =>
-        b.toLowerCase().startsWith(brandQuery) ||
-        b.toLowerCase().includes(brandQuery)
-    )
+    .filter((b) => b.toLowerCase().includes(brandQuery))
     .slice(0, 8);
 
-  // If a brand is chosen, prioritize models for that brand
   const modelsForBrand = formData.brand
     ? products
-        .filter(
-          (p: any) =>
-            p.brand && p.brand.toLowerCase() === formData.brand.toLowerCase()
-        )
-        .map((p: any) => p.model)
+        .filter((p) => p.brand?.toLowerCase() === formData.brand.toLowerCase())
+        .map((p) => p.model)
     : [];
 
-  const modelPool = modelsForBrand.length > 0 ? modelsForBrand : knownModels;
-
+  const modelPool = modelsForBrand.length ? modelsForBrand : knownModels;
   const modelSuggestions = Array.from(new Set(modelPool))
-    .filter(Boolean)
-    .filter(
-      (m) =>
-        m.toLowerCase().startsWith(modelQuery) ||
-        m.toLowerCase().includes(modelQuery)
-    )
+    .filter((m) => m?.toLowerCase().includes(modelQuery))
     .slice(0, 8);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (
-      !formData.name ||
-      !formData.category ||
-      !formData.price ||
-      !formData.quantity ||
-      !formData.brand ||
-      !formData.model
-    ) {
+    const { name, category, price, quantity, brand, model } = formData;
+
+    if (!name || !category || !brand || !model) {
       alert("Заповніть всі обов'язкові поля");
       return;
     }
 
-    const price = Number.parseFloat(formData.price);
-    const quantity = Number.parseInt(formData.quantity);
+    const parsedPrice = parseFloat(price);
+    const parsedQuantity = parseInt(quantity, 10);
 
-    if (isNaN(price) || price <= 0) {
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
       alert("Введіть коректну ціну");
       return;
     }
-
-    if (isNaN(quantity) || quantity < 0) {
+    if (isNaN(parsedQuantity) || parsedQuantity < 0) {
       alert("Введіть коректну кількість");
       return;
     }
 
-    // Если категория новая — сохраняем
-    const typedCategory = formData.category.trim();
-    const exists = (persistedCategories || []).some(
-      (c: any) => c.name.toLowerCase() === typedCategory.toLowerCase()
-    );
-    if (!exists && typedCategory) {
-      createCategory(typedCategory).catch((err) => {
-        console.warn("Could not persist category:", err);
-      });
+    const typedCategory = category.trim();
+    if (
+      !persistedCategories.some(
+        (c) => c.name.toLowerCase() === typedCategory.toLowerCase()
+      ) &&
+      typedCategory
+    ) {
+      createCategory(typedCategory).catch(console.warn);
     }
 
-    const productData = {
-      name: formData.name.trim(),
+    const productData: Product = {
+      ...formData,
+      name: name.trim(),
       category: typedCategory,
-      price,
-      quantity,
+      price: parsedPrice,
+      quantity: parsedQuantity,
+      brand: brand.trim(),
+      model: model.trim(),
       description: formData.description.trim(),
-      brand: formData.brand.trim(),
-      model: formData.model.trim(),
       barcode: formData.barcode.trim() || null,
       store_id: formData.store_id || null,
     };
 
+    try {
+      localStorage.setItem("lastProductDefaults", JSON.stringify(productData));
+    } catch {}
+
     onSubmit(productData);
   };
+
+  const InputField = ({
+    label,
+    value,
+    onChange,
+    type = "text",
+    step,
+    min,
+    list,
+    suggestions = [],
+    setValue,
+  }: {
+    label: string;
+    value: string;
+    onChange: (val: string) => void;
+    type?: string;
+    step?: number;
+    min?: number;
+    list?: string[];
+    suggestions?: string[];
+    setValue?: (val: string) => void;
+  }) => (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      <input
+        type={type}
+        step={step}
+        min={min}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        list={list && list.length > 0 ? `${label}-list` : undefined}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder={label}
+      />
+      {list && (
+        <datalist id={`${label}-list`}>
+          {list.map((item) => (
+            <option key={item} value={item} />
+          ))}
+        </datalist>
+      )}
+      {suggestions.length > 0 && setValue && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setValue(s)}
+              className="text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <Card>
@@ -175,168 +263,70 @@ export function ProductForm({ product, onSubmit, onCancel }: ProductFormProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Назва товару *
-              </label>
-              <Input
-                type="text"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                placeholder="Введіть назву товару"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Категорія *
-              </label>
-              <input
-                list="categories-list"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={formData.category}
-                onChange={(e) =>
-                  setFormData({ ...formData, category: e.target.value })
-                }
-                placeholder="Виберіть або введіть нову категорію"
-                required
-              />
-              <datalist id="categories-list">
-                {knownCategories.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
-            </div>
+            <InputField
+              label="Назва товару *"
+              value={formData.name}
+              onChange={(v) => setFormData({ ...formData, name: v })}
+            />
+            <InputField
+              label="Категорія *"
+              value={formData.category}
+              onChange={(v) => setFormData({ ...formData, category: v })}
+              list={knownCategories}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Бренд *</label>
-              <input
-                list="brands-list"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={formData.brand}
-                onChange={(e) =>
-                  setFormData({ ...formData, brand: e.target.value })
-                }
-                placeholder="Введіть бренд"
-                required
-              />
-              <datalist id="brands-list">
-                {knownBrands.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
-              {brandSuggestions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {brandSuggestions.map((b) => (
-                    <button
-                      key={b}
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({ ...prev, brand: b }))
-                      }
-                      className="text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
-                    >
-                      {b}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Модель *</label>
-              <input
-                list="models-list"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={formData.model}
-                onChange={(e) =>
-                  setFormData({ ...formData, model: e.target.value })
-                }
-                placeholder="Введіть модель"
-                required
-              />
-              <datalist id="models-list">
-                {knownModels.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-              {modelSuggestions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {modelSuggestions.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({ ...prev, model: m }))
-                      }
-                      className="text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <InputField
+              label="Бренд *"
+              value={formData.brand}
+              onChange={(v) => setFormData({ ...formData, brand: v })}
+              list={knownBrands}
+              suggestions={brandSuggestions}
+              setValue={(v) => setFormData({ ...formData, brand: v })}
+            />
+            <InputField
+              label="Модель *"
+              value={formData.model}
+              onChange={(v) => setFormData({ ...formData, model: v })}
+              list={knownModels}
+              suggestions={modelSuggestions}
+              setValue={(v) => setFormData({ ...formData, model: v })}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Ціна (₴) *
-              </label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.price}
-                onChange={(e) =>
-                  setFormData({ ...formData, price: e.target.value })
-                }
-                placeholder="0.00"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Кількість *
-              </label>
-              <Input
-                type="number"
-                min="0"
-                value={formData.quantity}
-                onChange={(e) =>
-                  setFormData({ ...formData, quantity: e.target.value })
-                }
-                placeholder="0"
-                required
-              />
-            </div>
+            <InputField
+              label="Ціна (₴) *"
+              type="number"
+              step={0.01}
+              min={0}
+              value={formData.price}
+              onChange={(v) => setFormData({ ...formData, price: v })}
+            />
+            <InputField
+              label="Кількість *"
+              type="number"
+              step={1}
+              min={0}
+              value={formData.quantity}
+              onChange={(v) => setFormData({ ...formData, quantity: v })}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Штрих-код
-              </label>
-              <Input
-                type="text"
-                value={formData.barcode}
-                onChange={(e) =>
-                  setFormData({ ...formData, barcode: e.target.value })
-                }
-                placeholder="Введіть штрих-код"
-              />
-            </div>
+            <InputField
+              label="Штрих-код"
+              value={formData.barcode}
+              onChange={(v) => setFormData({ ...formData, barcode: v })}
+            />
             {currentUser?.role === "owner" && (
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Магазин
                 </label>
                 <Select
-                  value={formData.store_id}
+                  value={formData.store_id ?? ""}
                   onValueChange={(value) =>
                     setFormData({ ...formData, store_id: value })
                   }

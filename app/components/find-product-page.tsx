@@ -24,6 +24,116 @@ import {
 import { useApp } from "../context/app-context";
 import { BarcodeScanner } from "./barcode-scanner";
 
+// ---------------- Типы ----------------
+interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  model: string;
+  category: string;
+  price: number;
+  quantity: number;
+  barcode?: string;
+  description?: string;
+  store_id: string;
+  created_at: string;
+}
+
+interface Store {
+  id: string;
+  name: string;
+}
+
+type StockStatus = {
+  status: "out" | "low" | "good";
+  label: string;
+  color: string;
+};
+
+// ---------------- Product Card ----------------
+interface ProductCardProps {
+  product: Product;
+  store?: Store;
+}
+
+function ProductCard({ product, store }: ProductCardProps) {
+  const getStockStatus = (quantity: number): StockStatus => {
+    if (quantity === 0)
+      return { status: "out", label: "Немає в наявності", color: "bg-red-500" };
+    if (quantity <= 10)
+      return { status: "low", label: "Мало на складі", color: "bg-yellow-500" };
+    return { status: "good", label: "В наявності", color: "bg-green-500" };
+  };
+
+  const stockStatus = getStockStatus(product.quantity);
+
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardContent className="p-6 space-y-3">
+        <div className="flex justify-between items-start">
+          <Badge variant="outline" className="text-xs">
+            {product.category}
+          </Badge>
+          <div
+            className={`w-3 h-3 rounded-full ${stockStatus.color}`}
+            title={stockStatus.label}
+          />
+        </div>
+
+        <div>
+          <h3 className="font-semibold text-lg mb-1">{product.name}</h3>
+          <p className="text-sm text-gray-600 mb-2">
+            <span className="font-medium">{product.brand}</span> {product.model}
+          </p>
+          {product.description && (
+            <p className="text-sm text-gray-600 mb-2">{product.description}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-2xl font-bold text-green-600">
+              {product.price.toLocaleString()} ₴
+            </span>
+            <span
+              className={`text-sm font-medium ${
+                stockStatus.status === "out" ? "text-red-600" : ""
+              }`}
+            >
+              {product.quantity} шт
+            </span>
+          </div>
+
+          {product.barcode && (
+            <div className="text-xs text-gray-600 font-mono bg-gray-100 p-2 rounded">
+              Штрих-код: {product.barcode}
+            </div>
+          )}
+
+          {store && (
+            <div className="flex items-center gap-1 text-sm text-gray-600">
+              <MapPin className="h-4 w-4" />
+              <span>{store.name}</span>
+            </div>
+          )}
+
+          <div className="text-xs text-gray-500">
+            Додано: {new Date(product.created_at).toLocaleDateString("uk-UA")}
+          </div>
+        </div>
+
+        {product.quantity === 0 && (
+          <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-2 rounded">
+            <AlertCircle className="h-4 w-4" />
+            <span>Товар закінчився</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------- Main Page ----------------
 interface FindProductPageProps {
   onBack: () => void;
 }
@@ -36,9 +146,9 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
   const [stockFilter, setStockFilter] = useState("all");
   const [showScanner, setShowScanner] = useState(false);
 
-  // Фильтрация продуктов
+  // ---------------- Фильтрация ----------------
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
+    return products.filter((product: Product) => {
       const matchesSearch =
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -77,7 +187,7 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
     currentUser,
   ]);
 
-  // Получение уникальных категорий
+  // ---------------- Уникальные категории ----------------
   const categories = Array.from(
     new Set(products.map((p) => p.category))
   ).filter(Boolean);
@@ -87,14 +197,14 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
     setShowScanner(false);
   };
 
-  const getStockStatus = (quantity: number) => {
-    if (quantity === 0)
-      return { status: "out", label: "Немає в наявності", color: "bg-red-500" };
-    if (quantity <= 10)
-      return { status: "low", label: "Мало на складі", color: "bg-yellow-500" };
-    return { status: "good", label: "В наявності", color: "bg-green-500" };
+  const resetFilters = () => {
+    setSearchTerm("");
+    setCategoryFilter("all");
+    setStoreFilter("all");
+    setStockFilter("all");
   };
 
+  // ---------------- Render ----------------
   return (
     <div className="min-h-screen bg-gray-200">
       {/* Header */}
@@ -115,7 +225,7 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
 
       {/* Content */}
       <div className="p-6 space-y-6">
-        {/* Search and Filters */}
+        {/* Search & Filters */}
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="flex gap-4">
@@ -184,12 +294,7 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
 
               <Button
                 variant="outline"
-                onClick={() => {
-                  setSearchTerm("");
-                  setCategoryFilter("all");
-                  setStoreFilter("all");
-                  setStockFilter("all");
-                }}
+                onClick={resetFilters}
                 className="bg-transparent"
               >
                 <Filter className="h-4 w-4 mr-2" />
@@ -215,85 +320,9 @@ export function FindProductPage({ onBack }: FindProductPageProps) {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProducts.map((product) => {
-              const stockStatus = getStockStatus(product.quantity);
               const store = stores.find((s) => s.id === product.store_id);
-
               return (
-                <Card
-                  key={product.id}
-                  className="hover:shadow-md transition-shadow"
-                >
-                  <CardContent className="p-6">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <Badge variant="outline" className="text-xs">
-                          {product.category}
-                        </Badge>
-                        <div
-                          className={`w-3 h-3 rounded-full ${stockStatus.color}`}
-                          title={stockStatus.label}
-                        />
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold text-lg mb-1">
-                          {product.name}
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-2">
-                          <span className="font-medium">{product.brand}</span>{" "}
-                          {product.model}
-                        </p>
-                        {product.description && (
-                          <p className="text-sm text-gray-600 mb-2">
-                            {product.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-2xl font-bold text-green-600">
-                            {product.price.toLocaleString()} ₴
-                          </span>
-                          <span
-                            className={`text-sm font-medium ${
-                              stockStatus.status === "out" ? "text-red-600" : ""
-                            }`}
-                          >
-                            {product.quantity} шт
-                          </span>
-                        </div>
-
-                        {product.barcode && (
-                          <div className="text-xs text-gray-600 font-mono bg-gray-100 p-2 rounded">
-                            Штрих-код: {product.barcode}
-                          </div>
-                        )}
-
-                        {store && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <MapPin className="h-4 w-4" />
-                            <span>{store.name}</span>
-                          </div>
-                        )}
-
-                        <div className="text-xs text-gray-500">
-                          Додано:{" "}
-                          {new Date(product.created_at).toLocaleDateString(
-                            "uk-UA"
-                          )}
-                        </div>
-                      </div>
-
-                      {product.quantity === 0 && (
-                        <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-2 rounded">
-                          <AlertCircle className="h-4 w-4" />
-                          <span>Товар закінчився</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <ProductCard key={product.id} product={product} store={store} />
               );
             })}
           </div>

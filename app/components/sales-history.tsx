@@ -1,12 +1,18 @@
-"use client"
+"use client";
 
-import { useState, useMemo, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState, useMemo, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   Search,
@@ -25,74 +31,94 @@ import {
   BarChart3,
   Info,
   RefreshCw,
-} from "lucide-react"
-import { useApp } from "../context/app-context"
+} from "lucide-react";
+import { useApp } from "../context/app-context";
 
 interface SalesHistoryProps {
-  onBack: () => void
+  onBack: () => void;
 }
 
 export function SalesHistory({ onBack }: SalesHistoryProps) {
-  const { sales, users, stores, currentUser, refreshSales, isOnline } = useApp()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [paymentFilter, setPaymentFilter] = useState("all")
-  const [sellerFilter, setSellerFilter] = useState("all")
-  const [storeFilter, setStoreFilter] = useState("all")
-  const [selectedSale, setSelectedSale] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState("list")
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const { sales, users, stores, currentUser, refreshSales, isOnline } =
+    useApp();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [sellerFilter, setSellerFilter] = useState("all");
+  const [storeFilter, setStoreFilter] = useState("all");
+  const [selectedSale, setSelectedSale] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("list");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Для продавцов показываем только продажи за сегодня
   const filteredSales = useMemo(() => {
-    let salesData = sales
+    let salesData = sales;
 
     // Если пользователь - продавец, фильтруем только его продажи за сегодня
     if (currentUser?.role === "seller") {
-      const today = new Date()
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const today = new Date();
+      const startOfDay = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      );
 
       salesData = sales.filter((sale) => {
-        const saleDate = new Date(sale.created_at)
-        return saleDate >= startOfDay && sale.seller_id === currentUser.id
-      })
+        const saleDate = new Date(sale.created_at);
+        return saleDate >= startOfDay && sale.seller_id === currentUser.id;
+      });
     }
 
     return salesData.filter((sale) => {
       const matchesSearch =
         sale.receipt_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.seller?.name || "").toLowerCase().includes(searchTerm.toLowerCase())
+        (sale.seller?.name || "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
 
-      const matchesPayment = paymentFilter === "all" || sale.payment_method === paymentFilter
-      const matchesSeller = sellerFilter === "all" || sale.seller_id === sellerFilter
-      const matchesStore = storeFilter === "all" || sale.store_id === storeFilter
+      const matchesPayment =
+        paymentFilter === "all" || sale.payment_method === paymentFilter;
+      const matchesSeller =
+        sellerFilter === "all" || sale.seller_id === sellerFilter;
+      const matchesStore =
+        storeFilter === "all" || sale.store_id === storeFilter;
 
-      return matchesSearch && matchesPayment && matchesSeller && matchesStore
-    })
-  }, [sales, searchTerm, paymentFilter, sellerFilter, storeFilter, currentUser])
+      return matchesSearch && matchesPayment && matchesSeller && matchesStore;
+    });
+  }, [
+    sales,
+    searchTerm,
+    paymentFilter,
+    sellerFilter,
+    storeFilter,
+    currentUser,
+  ]);
 
   const getSalesStats = () => {
-    const total = filteredSales.length
-    const totalAmount = filteredSales.reduce((sum, sale) => sum + sale.total_amount, 0)
-    const averageCheck = total > 0 ? totalAmount / total : 0
+    const total = filteredSales.length;
+    const totalAmount = filteredSales.reduce(
+      (sum, sale) => sum + sale.total_amount,
+      0
+    );
+    const averageCheck = total > 0 ? totalAmount / total : 0;
     const cashAmount = filteredSales
       .filter((s) => s.payment_method === "cash")
-      .reduce((sum, s) => sum + s.total_amount, 0)
+      .reduce((sum, s) => sum + s.total_amount, 0);
     const terminalAmount = filteredSales
       .filter((s) => s.payment_method === "terminal")
-      .reduce((sum, s) => sum + s.total_amount, 0)
+      .reduce((sum, s) => sum + s.total_amount, 0);
 
-    return { total, totalAmount, averageCheck, cashAmount, terminalAmount }
-  }
+    return { total, totalAmount, averageCheck, cashAmount, terminalAmount };
+  };
 
-  const stats = getSalesStats()
+  const stats = getSalesStats();
 
   const handleViewSale = (sale: any) => {
-    setSelectedSale(sale)
-  }
+    setSelectedSale(sale);
+  };
 
   const closeSaleModal = () => {
-    setSelectedSale(null)
-  }
+    setSelectedSale(null);
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("uk-UA", {
@@ -101,52 +127,52 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    })
-  }
+    });
+  };
 
   // Автоматическое обновление данных при монтировании компонента
   useEffect(() => {
     const refreshData = async () => {
       if (refreshSales && isOnline) {
-        console.log("🔄 SalesHistory: Auto-refreshing sales data on mount")
         try {
-          setIsRefreshing(true)
-          await refreshSales()
-          console.log("✅ SalesHistory: Sales data refreshed successfully")
+          setIsRefreshing(true);
+          await refreshSales();
         } catch (error) {
-          console.error("❌ SalesHistory: Error refreshing sales data:", error)
+          console.error("❌ SalesHistory: Error refreshing sales data:", error);
         } finally {
-          setIsRefreshing(false)
+          setIsRefreshing(false);
         }
       }
-    }
+    };
 
     // Only refresh on component mount, not on every dependency change
-    refreshData()
-  }, []) // Empty dependency array to run only on mount
+    refreshData();
+  }, []); // Empty dependency array to run only on mount
 
   // Функция для ручного обновления данных
   const handleRefresh = async () => {
-    if (!refreshSales || !isOnline || isRefreshing) return
-
-    console.log("🔄 SalesHistory: Manual refresh triggered")
+    if (!refreshSales || !isOnline || isRefreshing) return;
     try {
-      setIsRefreshing(true)
-      await refreshSales()
-      console.log("✅ SalesHistory: Manual refresh completed")
+      setIsRefreshing(true);
+      await refreshSales();
     } catch (error) {
-      console.error("❌ SalesHistory: Error during manual refresh:", error)
+      console.error("❌ SalesHistory: Error during manual refresh:", error);
     } finally {
-      setIsRefreshing(false)
+      setIsRefreshing(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-200">
       {/* Header */}
       <header className="bg-black text-white px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-800">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onBack}
+            className="text-white hover:bg-gray-800"
+          >
             <ArrowLeft className="h-6 w-6" />
           </Button>
           <h1 className="text-2xl font-bold">Історія продажів</h1>
@@ -161,10 +187,15 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
             onClick={handleRefresh}
             disabled={!isOnline || isRefreshing}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? 'Оновлення...' : 'Оновити'}
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            {isRefreshing ? "Оновлення..." : "Оновити"}
           </Button>
-          <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white hover:text-black">
+          <Button
+            variant="outline"
+            className="bg-transparent border-white text-white hover:bg-white hover:text-black"
+          >
             <Download className="h-4 w-4 mr-2" />
             Експорт
           </Button>
@@ -176,7 +207,9 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
           <div className="flex items-center gap-2 text-blue-800">
             <Info className="h-4 w-4" />
-            <span className="text-sm">Показано продажі за сьогодні для вашого облікового запису</span>
+            <span className="text-sm">
+              Показано продажі за сьогодні для вашого облікового запису
+            </span>
           </div>
         </div>
       )}
@@ -239,10 +272,10 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setSearchTerm("")
-                    setPaymentFilter("all")
-                    setSellerFilter("all")
-                    setStoreFilter("all")
+                    setSearchTerm("");
+                    setPaymentFilter("all");
+                    setSellerFilter("all");
+                    setStoreFilter("all");
                   }}
                   className="bg-transparent"
                 >
@@ -263,11 +296,17 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
             </div>
           </div>
         )}
-        
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 ${isRefreshing ? 'opacity-50 pointer-events-none' : ''}`}>
+
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 ${
+            isRefreshing ? "opacity-50 pointer-events-none" : ""
+          }`}
+        >
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {stats.total}
+              </div>
               <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                 <ShoppingCart className="h-4 w-4" />
                 Продажів
@@ -276,7 +315,9 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">{stats.totalAmount.toLocaleString()} ₴</div>
+              <div className="text-2xl font-bold text-green-600">
+                {stats.totalAmount.toLocaleString()} ₴
+              </div>
               <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                 <DollarSign className="h-4 w-4" />
                 Загальна сума
@@ -285,7 +326,9 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600">{stats.averageCheck.toFixed(0)} ₴</div>
+              <div className="text-2xl font-bold text-purple-600">
+                {stats.averageCheck.toFixed(0)} ₴
+              </div>
               <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                 <BarChart3 className="h-4 w-4" />
                 Середній чек
@@ -294,7 +337,9 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.cashAmount.toLocaleString()} ₴</div>
+              <div className="text-2xl font-bold text-orange-600">
+                {stats.cashAmount.toLocaleString()} ₴
+              </div>
               <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                 <Banknote className="h-4 w-4" />
                 Готівка
@@ -303,7 +348,9 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-indigo-600">{stats.terminalAmount.toLocaleString()} ₴</div>
+              <div className="text-2xl font-bold text-indigo-600">
+                {stats.terminalAmount.toLocaleString()} ₴
+              </div>
               <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                 <CreditCard className="h-4 w-4" />
                 Термінал
@@ -325,11 +372,18 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="list" className={`space-y-4 ${isRefreshing ? 'opacity-50 pointer-events-none' : ''}`}>
+          <TabsContent
+            value="list"
+            className={`space-y-4 ${
+              isRefreshing ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
             {filteredSales.length === 0 ? (
               <Card className="p-12 text-center">
                 <Receipt className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-600 mb-2">Продажі не знайдено</h3>
+                <h3 className="text-xl font-medium text-gray-600 mb-2">
+                  Продажі не знайдено
+                </h3>
                 <p className="text-gray-500">
                   {currentUser?.role === "seller"
                     ? "Сьогодні ще не було продажів"
@@ -339,17 +393,30 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
             ) : (
               <div className="space-y-4">
                 {filteredSales.map((sale) => {
-                  const store = stores.find((s) => s.id === sale.store_id)
+                  const store = stores.find((s) => s.id === sale.store_id);
                   return (
-                    <Card key={sale.id} className="hover:shadow-md transition-shadow">
+                    <Card
+                      key={sale.id}
+                      className="hover:shadow-md transition-shadow"
+                    >
                       <CardContent className="p-6">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold">Чек #{sale.receipt_number}</h3>
+                              <h3 className="text-lg font-semibold">
+                                Чек #{sale.receipt_number}
+                              </h3>
                               <Badge
-                                variant={sale.payment_method === "cash" ? "default" : "secondary"}
-                                className={sale.payment_method === "cash" ? "bg-orange-600" : "bg-purple-600"}
+                                variant={
+                                  sale.payment_method === "cash"
+                                    ? "default"
+                                    : "secondary"
+                                }
+                                className={
+                                  sale.payment_method === "cash"
+                                    ? "bg-orange-600"
+                                    : "bg-purple-600"
+                                }
                               >
                                 {sale.payment_method === "cash" ? (
                                   <>
@@ -382,13 +449,19 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                                 </div>
                               )}
                             </div>
-                            <div className="mt-2 text-sm text-gray-600">Товарів: {sale.items_data?.length || 0} шт</div>
+                            <div className="mt-2 text-sm text-gray-600">
+                              Товарів: {sale.items_data?.length || 0} шт
+                            </div>
                           </div>
                           <div className="text-right ml-4">
                             <div className="text-2xl font-bold text-green-600 mb-2">
                               {sale.total_amount.toLocaleString()} ₴
                             </div>
-                            <Button size="sm" variant="outline" onClick={() => handleViewSale(sale)}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewSale(sale)}
+                            >
                               <Eye className="h-4 w-4 mr-2" />
                               Переглянути
                             </Button>
@@ -396,13 +469,18 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                         </div>
                       </CardContent>
                     </Card>
-                  )
+                  );
                 })}
               </div>
             )}
           </TabsContent>
 
-          <TabsContent value="analytics" className={`space-y-4 ${isRefreshing ? 'opacity-50 pointer-events-none' : ''}`}>
+          <TabsContent
+            value="analytics"
+            className={`space-y-4 ${
+              isRefreshing ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
@@ -422,7 +500,11 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                         <div
                           className="bg-orange-600 h-2 rounded-full"
                           style={{
-                            width: `${stats.totalAmount > 0 ? (stats.cashAmount / stats.totalAmount) * 100 : 0}%`,
+                            width: `${
+                              stats.totalAmount > 0
+                                ? (stats.cashAmount / stats.totalAmount) * 100
+                                : 0
+                            }%`,
                           }}
                         />
                       </div>
@@ -436,7 +518,12 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                         <div
                           className="bg-purple-600 h-2 rounded-full"
                           style={{
-                            width: `${stats.totalAmount > 0 ? (stats.terminalAmount / stats.totalAmount) * 100 : 0}%`,
+                            width: `${
+                              stats.totalAmount > 0
+                                ? (stats.terminalAmount / stats.totalAmount) *
+                                  100
+                                : 0
+                            }%`,
                           }}
                         />
                       </div>
@@ -455,10 +542,14 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center p-3 border rounded-lg">
-                      <span className="text-sm font-medium">Найбільший чек</span>
+                      <span className="text-sm font-medium">
+                        Найбільший чек
+                      </span>
                       <span className="font-bold text-green-600">
                         {filteredSales.length > 0
-                          ? Math.max(...filteredSales.map((s) => s.total_amount)).toLocaleString()
+                          ? Math.max(
+                              ...filteredSales.map((s) => s.total_amount)
+                            ).toLocaleString()
                           : 0}{" "}
                         ₴
                       </span>
@@ -467,15 +558,23 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                       <span className="text-sm font-medium">Найменший чек</span>
                       <span className="font-bold text-blue-600">
                         {filteredSales.length > 0
-                          ? Math.min(...filteredSales.map((s) => s.total_amount)).toLocaleString()
+                          ? Math.min(
+                              ...filteredSales.map((s) => s.total_amount)
+                            ).toLocaleString()
                           : 0}{" "}
                         ₴
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-3 border rounded-lg">
-                      <span className="text-sm font-medium">Загальна кількість товарів</span>
+                      <span className="text-sm font-medium">
+                        Загальна кількість товарів
+                      </span>
                       <span className="font-bold text-purple-600">
-                        {filteredSales.reduce((sum, sale) => sum + (sale.items_data?.length || 0), 0)} шт
+                        {filteredSales.reduce(
+                          (sum, sale) => sum + (sale.items_data?.length || 0),
+                          0
+                        )}{" "}
+                        шт
                       </span>
                     </div>
                   </div>
@@ -506,20 +605,28 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     <div className="space-y-2 text-sm">
                       <div>
                         <span className="text-gray-600">Номер чеку:</span>
-                        <span className="ml-2 font-mono">{selectedSale.receipt_number}</span>
+                        <span className="ml-2 font-mono">
+                          {selectedSale.receipt_number}
+                        </span>
                       </div>
                       <div>
                         <span className="text-gray-600">Дата:</span>
-                        <span className="ml-2">{formatDate(selectedSale.created_at)}</span>
+                        <span className="ml-2">
+                          {formatDate(selectedSale.created_at)}
+                        </span>
                       </div>
                       <div>
                         <span className="text-gray-600">Спосіб оплати:</span>
                         <Badge
                           className={`ml-2 ${
-                            selectedSale.payment_method === "cash" ? "bg-orange-600" : "bg-purple-600"
+                            selectedSale.payment_method === "cash"
+                              ? "bg-orange-600"
+                              : "bg-purple-600"
                           }`}
                         >
-                          {selectedSale.payment_method === "cash" ? "Готівка" : "Термінал"}
+                          {selectedSale.payment_method === "cash"
+                            ? "Готівка"
+                            : "Термінал"}
                         </Badge>
                       </div>
                     </div>
@@ -530,13 +637,16 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                       {selectedSale.seller && (
                         <div>
                           <span className="text-gray-600">Продавець:</span>
-                          <span className="ml-2">{selectedSale.seller.name}</span>
+                          <span className="ml-2">
+                            {selectedSale.seller.name}
+                          </span>
                         </div>
                       )}
                       <div>
                         <span className="text-gray-600">Магазин:</span>
                         <span className="ml-2">
-                          {stores.find((s) => s.id === selectedSale.store_id)?.name || "Невідомо"}
+                          {stores.find((s) => s.id === selectedSale.store_id)
+                            ?.name || "Невідомо"}
                         </span>
                       </div>
                     </div>
@@ -546,31 +656,45 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                 {/* Items */}
                 <div>
                   <h4 className="font-medium mb-4">Товари в чеку</h4>
-                  {selectedSale.items_data && selectedSale.items_data.length > 0 ? (
+                  {selectedSale.items_data &&
+                  selectedSale.items_data.length > 0 ? (
                     <div className="space-y-3">
-                      {selectedSale.items_data.map((item: any, index: number) => (
-                        <div key={index} className="flex justify-between items-center p-3 border rounded-lg">
-                          <div>
-                            <h5 className="font-medium">{item.product_name || item.name}</h5>
-                            {(item.brand || item.model) && (
+                      {selectedSale.items_data.map(
+                        (item: any, index: number) => (
+                          <div
+                            key={index}
+                            className="flex justify-between items-center p-3 border rounded-lg"
+                          >
+                            <div>
+                              <h5 className="font-medium">
+                                {item.product_name || item.name}
+                              </h5>
+                              {(item.brand || item.model) && (
+                                <p className="text-sm text-gray-600">
+                                  {item.brand} {item.model}
+                                </p>
+                              )}
                               <p className="text-sm text-gray-600">
-                                {item.brand} {item.model}
+                                {item.price?.toLocaleString()} ₴ ×{" "}
+                                {item.quantity} шт
                               </p>
-                            )}
-                            <p className="text-sm text-gray-600">
-                              {item.price?.toLocaleString()} ₴ × {item.quantity} шт
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold">
-                              {((item.price || 0) * (item.quantity || 1)).toLocaleString()} ₴
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold">
+                                {(
+                                  (item.price || 0) * (item.quantity || 1)
+                                ).toLocaleString()}{" "}
+                                ₴
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      )}
                     </div>
                   ) : (
-                    <p className="text-gray-500">Інформація про товари відсутня</p>
+                    <p className="text-gray-500">
+                      Інформація про товари відсутня
+                    </p>
                   )}
                 </div>
 
@@ -578,7 +702,9 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                 <div className="border-t pt-4">
                   <div className="flex justify-between items-center text-xl font-bold">
                     <span>Загальна сума:</span>
-                    <span className="text-green-600">{selectedSale.total_amount.toLocaleString()} ₴</span>
+                    <span className="text-green-600">
+                      {selectedSale.total_amount.toLocaleString()} ₴
+                    </span>
                   </div>
                 </div>
               </div>
@@ -587,5 +713,5 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -3,6 +3,7 @@
 import type React from "react";
 import { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 import { hashPassword } from "@/lib/hash";
 
 interface User {
@@ -134,6 +135,18 @@ interface AppContextType extends AppState {
   getDailySalesStats: () => any[];
   getTotalStats: () => any;
   loadData: (user: User | null) => Promise<void>;
+  /**
+   * Load products with optional pagination params. By default fetches first 50.
+   * If append is true, new records are appended to current products.
+   */
+  loadProducts: (
+    user: User,
+    opts?: { limit?: number; offset?: number; append?: boolean }
+  ) => Promise<void>;
+  /** load more products using current state (append more starting from current length) */
+  loadMoreProducts: (user: User) => Promise<void>;
+  productsTotalCount?: number | null;
+  productsLoading?: boolean;
   getShiftStats: () => {
     start: Date;
     end: Date;
@@ -158,6 +171,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsTotalCount, setProductsTotalCount] = useState<number | null>(
+    null
+  );
+  const [productsLoading, setProductsLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -170,6 +187,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentStore, setCurrentStore] = useState<Store | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const { toast } = useToast();
   // If a shift should be auto-closed at midnight but we were offline at that moment,
   // track a pending auto-close so we can finish it when we return online.
   const [pendingAutoClose, setPendingAutoClose] = useState(false);
@@ -177,10 +195,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const currentStoreId = currentStore?.id || null;
 
   const removeVisit = (visitId: string) => {
-    console.log("🗑️ Removing visit from UI:", visitId);
     setVisits((prev) => {
       const filtered = prev.filter((visit) => visit.id !== visitId);
-      console.log("✅ Visits updated, remaining:", filtered.length);
       return filtered;
     });
   };
@@ -191,7 +207,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const cachedStores = localStorage.getItem("stores");
       if (cachedStores) {
         const parsed = JSON.parse(cachedStores);
-        console.log("📦 Loaded stores from cache:", parsed.length);
         setStores(parsed);
         setStoresLoading(false);
       }
@@ -210,8 +225,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const loadStores = async () => {
       try {
         setStoresLoading(true);
-        console.log("🏪 Loading stores, attempt:", retryCount + 1);
-
         const { data: storesData, error } = await supabase
           .from("stores")
           .select("*");
@@ -223,9 +236,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (retryCount < maxRetries && !cancelled) {
             retryCount++;
             const delay = Math.min(1000 * Math.pow(1.5, retryCount), 10000); // Exponential backoff with 10s cap
-            console.log(
-              `🔄 Retrying store loading (${retryCount}/${maxRetries}) in ${delay}ms...`
-            );
             setTimeout(() => {
               if (!cancelled) {
                 loadStores();
@@ -234,12 +244,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return;
           }
         } else if (!cancelled && storesData) {
-          console.log("✅ Stores loaded successfully:", storesData.length);
           setStores(storesData);
           // Cache stores in localStorage
           try {
             localStorage.setItem("stores", JSON.stringify(storesData));
-            console.log("📦 Stores cached in localStorage");
           } catch (err) {
             console.warn("Failed to cache stores:", err);
           }
@@ -250,9 +258,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Retry on network errors
         if (retryCount < maxRetries && !cancelled) {
           retryCount++;
-          console.log(
-            `🔄 Retrying store loading after error (${retryCount}/${maxRetries})...`
-          );
           setTimeout(() => {
             if (!cancelled) {
               loadStores();
@@ -356,9 +361,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // call endShift (makes a DB update)
           (async () => {
             try {
-              console.log(
-                "⏰ Auto-closing shift immediately (missed midnight) — calling endShift"
-              );
               await endShift();
               setPendingAutoClose(false);
             } catch (err) {
@@ -368,9 +370,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         } else {
           // we missed the midnight while offline — mark pending so we handle when we're back online
-          console.log(
-            "⏰ Missed midnight but offline — marking pending auto-close"
-          );
           setPendingAutoClose(true);
         }
 
@@ -379,22 +378,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Otherwise schedule a timer to trigger at that exact boundary
       const msUntil = nextMidnight.getTime() - now.getTime();
-      console.log(
-        "⏳ Scheduling auto-close for shift at:",
-        nextMidnight.toISOString(),
-        "in ms:",
-        msUntil
-      );
       const timer = setTimeout(async () => {
         try {
           if (isOnline) {
-            console.log("⌛ Reached midnight — auto-closing active shift");
             await endShift();
             setPendingAutoClose(false);
           } else {
-            console.log(
-              "⌛ Reached midnight but offline — will auto-close when back online"
-            );
             setPendingAutoClose(true);
           }
         } catch (err) {
@@ -416,9 +405,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        console.log(
-          "📡 Back online and pending auto-close exists — closing shift now"
-        );
         await endShift();
         setPendingAutoClose(false);
       } catch (err) {
@@ -513,8 +499,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline) return;
 
     try {
-      console.log("🔄 Loading data for user:", user?.name, "role:", user?.role);
-
       const { data: storesData } = await supabase.from("stores").select("*");
       if (storesData) setStores(storesData);
 
@@ -573,7 +557,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 🔍 Проверяем активную смену
-      console.log("🔍 Checking for active shift...");
       const { data: shiftData, error: shiftError } = await supabase
         .from("shifts")
         .select("*")
@@ -583,10 +566,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (shiftData) {
-        console.log("✅ Found active shift:", shiftData);
         setCurrentShift(shiftData);
       } else if (!shiftError) {
-        console.log("🔍 Checking for unclosed shifts...");
         const { data: unclosedShift } = await supabase
           .from("shifts")
           .select("*")
@@ -596,10 +577,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (unclosedShift) {
-          console.log("✅ Found unclosed shift:", unclosedShift);
           setCurrentShift(unclosedShift);
         } else {
-          console.log("ℹ️ No active or unclosed shifts found");
           setCurrentShift(null);
         }
       } else {
@@ -608,8 +587,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // === OWNER ===
       if (user.role === "owner") {
-        console.log("📊 Loading ALL data for owner");
-
         const { data: salesData } = await supabase
           .from("sales")
           .select("*")
@@ -631,26 +608,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (visitsData) {
-          console.log(
-            "📊 Loaded visits for store:",
-            storeId,
-            visitsData.length
-          );
           const visitsWithSellers = visitsData.map((visit) => {
             const seller = usersData?.find((u) => u.id === visit.seller_id);
             return { ...visit, seller };
           });
           setVisits(visitsWithSellers);
         } else {
-          console.log("ℹ️ No visits found for store:", storeId);
           setVisits([]);
         }
       }
 
       // === SELLER ===
       else if (user.role === "seller") {
-        console.log("🏪 Loading store data for seller, store_id:", storeId);
-
         const today = new Date();
         const startOfDay = new Date(
           today.getFullYear(),
@@ -696,35 +665,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loadProducts = async (user: User) => {
+  const loadProducts = async (
+    user: User,
+    opts: { limit?: number; offset?: number; append?: boolean } = {}
+  ) => {
+    if (!isOnline || !user) return;
+
+    const limit = opts.limit ?? 50;
+    const offset = opts.offset ?? 0;
+    const append = !!opts.append;
+
+    setProductsLoading(true);
     if (!isOnline || !user) return;
 
     try {
-      let data, error;
+      let res, data, error, count;
 
       if (user.role === "owner") {
-        const res = await supabase.from("products").select("*");
-        data = res.data;
-        error = res.error;
-      } else if (user.store_id || currentStore?.id) {
+        // range is inclusive
+        res = await supabase
+          .from("products")
+          .select("*", { count: "exact" })
+          .range(offset, offset + limit - 1);
+      } else {
         const storeId = currentStore?.id || user.store_id;
-        if (storeId) {
-          const res = await supabase
-            .from("products")
-            .select("*")
-            .eq("store_id", storeId);
-          data = res.data;
-          error = res.error;
-        } else {
-          data = [];
-          error = null;
+        if (!storeId) {
+          setProducts([]);
+          setProductsTotalCount(0);
+          setProductsLoading(false);
+          return;
         }
+
+        res = await supabase
+          .from("products")
+          .select("*", { count: "exact" })
+          .eq("store_id", storeId)
+          .range(offset, offset + limit - 1);
       }
 
+      data = res.data;
+      error = res.error;
+      // @ts-ignore - supabase client returns 'count' on responses when requested
+      count = res.count ?? null;
+
       if (error) throw error;
-      if (data) setProducts(data);
+
+      if (Array.isArray(data)) {
+        if (append && offset > 0) setProducts((prev) => [...prev, ...data]);
+        else setProducts(data);
+      }
+
+      // set total count if available (used by UI to control load more)
+      if (typeof count === "number") {
+        setProductsTotalCount(count);
+      } else if (Array.isArray(data)) {
+        // fallback: if no count provided, estimate
+        setProductsTotalCount((prev) => (prev == null ? data.length : prev));
+      }
     } catch (error) {
       console.error("Error loading products:", error);
+    } finally {
+      setProductsLoading(false);
     }
   };
 
@@ -932,6 +933,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setCurrentShift(data || null);
       setVisits([]);
+      // Clear previously-entered product defaults at shift start so the Add Product
+      // form starts empty for the first product in the new shift.
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          localStorage.removeItem("lastProductDefaults");
+        }
+      } catch (e) {
+        // ignore
+      }
     } catch (err) {
       console.error("Failed to start shift:", err);
     }
@@ -943,13 +953,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const now = new Date().toISOString();
 
-      // Update end_time and mark is_active = false
+      // Calculate total sales for this shift only (sales between shift.start_time and now)
+      // and then persist that value in the shift row. This prevents saving a global
+      // or cumulative amount which would make shift stats incorrect.
+      let shiftTotal = 0;
+      try {
+        const shiftStart = currentShift.start_time;
+
+        // Query the DB for sales that happened during this shift for the same store and user
+        const { data: shiftSales, error: salesError } = await supabase
+          .from("sales")
+          .select("total_amount")
+          .gte("created_at", shiftStart)
+          .lte("created_at", now)
+          .eq("store_id", currentShift.store_id)
+          .eq("seller_id", currentShift.user_id);
+
+        if (!salesError && Array.isArray(shiftSales)) {
+          shiftTotal = shiftSales.reduce(
+            (sum, row) => sum + (row.total_amount || 0),
+            0
+          );
+        } else if (salesError) {
+          console.warn(
+            "Failed to calculate shift total from sales table:",
+            salesError
+          );
+        }
+      } catch (e) {
+        console.warn("Error while computing shift total:", e);
+      }
+      // Update end_time and mark is_active = false with the shift-specific total
       const { error } = await supabase
         .from("shifts")
         .update({
           end_time: now,
           is_active: false,
-          total_sales: totalSalesAmount,
+          total_sales: shiftTotal,
         })
         .eq("id", currentShift.id);
 
@@ -966,8 +1006,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentShift(null);
       setTotalSalesAmount(0);
       setVisits([]);
-
-      console.log("✅ Shift ended successfully, ready for new shift");
     } catch (err) {
       console.error("Failed to end shift:", err);
     }
@@ -989,8 +1027,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error("store_id is required to add a product");
         return;
       }
-
-      console.log("Adding product with:", { ...rest, store_id: actualStoreId });
 
       const { data, error } = await supabase
         .from("products")
@@ -1024,23 +1060,123 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        // If already exists, fetch existing and return it
-        if ((error as any).code === "23505") {
-          const { data: existing } = await supabase
+        // Try to recover: even if insert returned an error (for example due to
+        // a unique constraint or other conflict), attempt to find the existing
+        // category by name and return it when possible. This avoids confusing
+        // the caller with an opaque empty error object.
+        try {
+          const { data: existing, error: existingErr } = await supabase
             .from("categories")
             .select("*")
             .eq("name", cleaned)
             .maybeSingle();
-          if (existing) {
+
+          if (!existingErr && existing) {
             setCategories((prev) => {
               const found = prev.find((p) => p.id === existing.id);
               if (found) return prev;
               return [...prev, existing];
             });
+            // User feedback: inform the user we reused an existing category
+            try {
+              toast({
+                title: "Категорія вже існує",
+                description: `Використано існуючу категорію "${cleaned}"`,
+                // keep default styling, short-lived
+              });
+            } catch (e) {
+              console.warn("toast failed (non-fatal)", e);
+            }
             return existing as Category;
           }
+        } catch (e) {
+          // ignore — we'll log the original error below
         }
-        console.error("createCategory error:", error);
+
+        // Log a richer error object when available so the console isn't just `{}`.
+        // Supabase error objects may be Error instances with non-enumerable
+        // properties (JSON.stringify shows `{}`), so log multiple representations.
+        // Diagnostics: log raw error client-side and attempt to post it to the server
+        try {
+          console.error("createCategory error (raw):", error);
+
+          const summarizeError = (err: any) => {
+            if (!err && err !== 0) return String(err);
+            try {
+              const parts: string[] = [];
+              if (typeof err === "string") parts.push(err);
+              if (err?.message) parts.push(`message=${err.message}`);
+              if (err?.code) parts.push(`code=${err.code}`);
+              if (err?.details) parts.push(`details=${err.details}`);
+              if (err?.hint) parts.push(`hint=${err.hint}`);
+              if (err?.status) parts.push(`status=${err.status}`);
+              if (err?.statusCode) parts.push(`statusCode=${err.statusCode}`);
+              if (typeof err?.toString === "function") {
+                const t = err.toString();
+                if (t && t !== "[object Object]") parts.push(`toString=${t}`);
+              }
+
+              const keys = Object.keys(err || {});
+              if (keys.length > 0) {
+                const small = keys.reduce(
+                  (acc: any, k) => ({ ...acc, [k]: err[k] }),
+                  {}
+                );
+                parts.push(`props=${JSON.stringify(small)}`);
+              }
+
+              if (parts.length > 0) return parts.join(" | ");
+              const allProps = Object.getOwnPropertyNames(err || {}).reduce(
+                (acc: any, k) => ({ ...acc, [k]: err[k] }),
+                {}
+              );
+              if (Object.keys(allProps).length > 0)
+                return `props_all=${JSON.stringify(allProps)}`;
+
+              return String(err);
+            } catch (e) {
+              return String(err);
+            }
+          };
+
+          try {
+            console.error(
+              "createCategory error summary:",
+              summarizeError(error)
+            );
+            console.error("createCategory error (raw):", error);
+          } catch (e) {
+            console.error("createCategory error (fallback):", error);
+          }
+
+          // If the error object looks empty on the client (rare), POST to a server-side
+          // diagnostics endpoint so we can capture server logs and more details.
+          try {
+            // Make a best-effort send (don't block): include context + user/store info if available
+            const payload = {
+              ctx: "createCategory",
+              category_name: cleaned,
+              client_user_id: currentUser?.id || null,
+              client_store_id: currentStore?.id || null,
+              client_agent: navigator?.userAgent || null,
+              error_summary: summarizeError(error),
+              error_raw: error,
+              timestamp: new Date().toISOString(),
+            } as any;
+
+            // We intentionally don't await here for speed; fire & forget
+            fetch("/api/diagnostics", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            }).catch((e) => console.warn("Diagnostics POST failed:", e));
+          } catch (e) {
+            console.warn("Failed to send diagnostics payload:", e);
+          }
+        } catch (e) {
+          console.error("createCategory error logging failed:", e);
+        }
+
         return null;
       }
 
@@ -1052,6 +1188,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             JSON.stringify([...categories, data])
           );
         } catch (e) {}
+
+        try {
+          toast({
+            title: "Категорія створена",
+            description: `Додано категорію "${cleaned}"`,
+          });
+        } catch (e) {
+          // non-fatal if toast fails
+        }
         return data as Category;
       }
     } catch (err) {
@@ -1129,7 +1274,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (
     sale: Omit<Sale, "id" | "store_id" | "created_at">
   ) => {
-    console.log("🚨 addSale ВЫЗВАНА! Параметры:", sale);
     if (!isOnline || !currentUser) {
       console.error("❌ Offline or no user, cannot add sale");
       throw new Error(
@@ -1137,15 +1281,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    console.log("🛒 Starting addSale process...");
-    console.log("📦 Sale items:", sale.items_data);
-    console.log("💰 Total amount:", sale.total_amount);
-
     try {
       const store_id = currentStore?.id || null;
 
       // Добавляем продажу
-      console.log("💾 Inserting sale into database...");
       const { data: saleData, error: saleError } = await supabase
         .from("sales")
         .insert([
@@ -1166,8 +1305,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Помилка створення продажу: " + saleError.message);
       }
 
-      console.log("✅ Sale added successfully:", saleData);
-
       if (saleData) {
         // Обновляем список продаж и сумму
         setSales((prev) => {
@@ -1177,24 +1314,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             0
           );
           setTotalSalesAmount(total);
-          console.log("📊 Updated sales list, new total:", total);
           return updatedSales;
         });
-
-        // ✅ ОБНОВЛЕНИЕ КОЛИЧЕСТВА ТОВАРОВ
-        console.log("🔄 Starting product quantity updates...");
-        console.log("📋 Current products in state:", products.length);
 
         // Обрабатываем каждый товар в продаже
         for (const item of sale.items_data) {
           const productId = item.product_id;
           const soldQty = item.quantity;
-
-          console.log(`\n📦 Processing item:`, {
-            productId,
-            soldQty,
-            productName: item.product_name,
-          });
 
           if (!productId || !soldQty) {
             console.warn(
@@ -1208,23 +1334,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const existingProduct = products.find((p) => p.id === productId);
           if (!existingProduct) {
             console.warn(`⚠️ Product ${productId} not found in local state`);
-            console.log(
-              "Available product IDs:",
-              products.map((p) => p.id)
-            );
             continue;
           }
 
           const currentQty = existingProduct.quantity;
           const newQty = Math.max(0, currentQty - soldQty);
-
-          console.log(`📊 Product ${productId} (${existingProduct.name}):`);
-          console.log(`   Current quantity: ${currentQty}`);
-          console.log(`   Sold quantity: ${soldQty}`);
-          console.log(`   New quantity: ${newQty}`);
-
-          // Обновляем в Supabase
-          console.log(`💾 Updating product ${productId} in Supabase...`);
           const { data: updatedProduct, error: updateError } = await supabase
             .from("products")
             .update({ quantity: newQty })
@@ -1241,16 +1355,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (updatedProduct) {
-            console.log(
-              `✅ Product ${productId} updated in Supabase:`,
-              updatedProduct
-            );
             // Обновляем локальное состояние
             setProducts((prev) => {
               const updated = prev.map((p) =>
                 p.id === productId ? updatedProduct : p
               );
-              console.log(`🔄 Updated local state for product ${productId}`);
               return updated;
             });
           } else {
@@ -1259,21 +1368,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             );
           }
         }
-
-        console.log("✅ All product updates completed");
       }
 
       // ✅ Автоматически обновляем данные о продажах после создания новой продажи
-      console.log("🔄 Auto-refreshing sales data after sale creation...");
       try {
         await refreshSales();
-        console.log("✅ Sales data auto-refreshed successfully");
       } catch (refreshError) {
         console.warn("⚠️ Failed to auto-refresh sales data:", refreshError);
         // Не бросаем ошибку, так как продажа уже создана успешно
       }
-
-      console.log("🎉 addSale process completed successfully!");
     } catch (error) {
       console.error("❌ addSale failed:", error);
       throw error;
@@ -1281,9 +1384,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const getDailySalesStats = () => {
-    console.log("📊 getDailySalesStats called, sales count:", sales.length);
     if (!sales || sales.length === 0) {
-      console.log("❌ No sales data available");
       return [];
     }
 
@@ -1333,15 +1434,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sellers: stats.sellers,
       }))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    console.log("✅ Daily stats result:", result);
     return result;
   };
 
   const getTotalStats = () => {
-    console.log("📈 getTotalStats called, sales count:", sales.length);
     if (!sales || sales.length === 0) {
-      console.log("❌ No sales data for total stats");
       return {
         totalRevenue: 0,
         totalSales: 0,
@@ -1391,14 +1488,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cashAmount,
       terminalAmount,
     };
-
-    console.log("✅ Total stats result:", result);
     return result;
   };
 
   const getShiftStats = () => {
     if (!currentShift) {
-      console.log("getShiftStats: no currentShift");
       return null;
     }
 
@@ -1406,9 +1500,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const end = currentShift.end_time
       ? new Date(currentShift.end_time)
       : new Date();
-
-    console.log("Shift start:", start.toISOString(), "end:", end.toISOString());
-    console.log("Total sales count:", sales.length);
 
     const salesDuringShift = sales.filter((s) => {
       const created = new Date(s.created_at);
@@ -1421,17 +1512,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       return isInTimeRange && isCurrentUser && isCurrentStore;
     });
-
-    console.log("Sales during shift count:", salesDuringShift.length);
-    console.log(
-      "📋 Sales details:",
-      salesDuringShift.map((s) => ({
-        id: s.id,
-        amount: s.total_amount,
-        created: s.created_at,
-        receipt: s.receipt_number,
-      }))
-    );
 
     const totalAmount = salesDuringShift.reduce(
       (sum, s) => sum + s.total_amount,
@@ -1451,24 +1531,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
     const avgCheck = count > 0 ? totalAmount / count : 0;
 
-    console.log("🔍 Shift calculation details:", {
-      shiftStart: start.toISOString(),
-      shiftEnd: end.toISOString(),
-      totalSales: salesDuringShift.length,
-      calculatedTotal: totalAmount,
-      expectedFromVisits:
-        visits?.reduce((sum, v) => sum + (v.sale_amount || 0), 0) || 0,
-    });
-
-    console.log("✅ Shift stats calculated:", {
-      totalAmount,
-      cashAmount,
-      terminalAmount,
-      count,
-      totalItems,
-      avgCheck,
-    });
-
     return {
       start,
       end,
@@ -1483,21 +1545,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshVisits = async () => {
     if (!currentUser) {
-      console.log("ℹ️ No user, clearing visits");
       setVisits([]);
       return;
     }
 
     const storeId = currentStore?.id;
     if (!storeId) {
-      console.log("ℹ️ No store selected, clearing visits");
       setVisits([]);
       return;
     }
 
     try {
-      console.log("🔄 Refreshing visits for store:", storeId);
-
       if (!storeId) {
         console.warn("⚠️ loadData: store_id is missing, skipping visits fetch");
         return;
@@ -1510,14 +1568,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .order("created_at", { ascending: false });
 
       if (visitsData) {
-        console.log("✅ Found visits:", visitsData.length);
         const visitsWithSellers = visitsData.map((visit) => {
           const seller = users.find((u) => u.id === visit.seller_id);
           return { ...visit, seller };
         });
         setVisits(visitsWithSellers);
       } else {
-        console.log("ℹ️ No visits found");
         setVisits([]);
       }
     } catch (error) {
@@ -1530,19 +1586,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline || !currentUser) return;
 
     try {
-      console.log("🔄 Refreshing sales data...");
-
       if (currentUser.role === "owner") {
-        console.log("📊 Loading ALL sales data for owner");
         const { data: salesData } = await supabase
           .from("sales")
           .select("*")
           .order("created_at", { ascending: false });
-        console.log(
-          "📈 All sales data loaded:",
-          salesData?.length || 0,
-          "sales"
-        );
 
         if (salesData) {
           const salesWithSellers = salesData.map((sale) => {
@@ -1557,15 +1605,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             0
           );
           setTotalSalesAmount(total);
-          console.log("✅ Sales data refreshed, total amount:", total);
         }
       } else if (currentUser.store_id || currentStore?.id) {
         const storeId = currentStore?.id || currentUser.store_id;
-        console.log(
-          "🏪 Loading store sales data for seller, store_id:",
-          storeId
-        );
-
         const today = new Date();
         const startOfDay = new Date(
           today.getFullYear(),
@@ -1595,7 +1637,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               0
             );
             setTotalSalesAmount(total);
-            console.log("✅ Seller sales data refreshed, total amount:", total);
           }
         } else {
           setSales([]);
@@ -1635,6 +1676,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const loadMoreProducts = async (user: User) => {
+    if (!user) return;
+    try {
+      await loadProducts(user, { offset: products.length, append: true });
+    } catch (err) {
+      console.error("loadMoreProducts failed:", err);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1670,6 +1720,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getTotalStats,
         getShiftStats,
         loadData,
+        loadProducts,
+        loadMoreProducts,
+        productsTotalCount,
+        productsLoading,
         refreshVisits,
         createCategory,
         refreshSales,
