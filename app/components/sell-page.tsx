@@ -217,6 +217,8 @@ export default function SellPage({
   const [discountPercent, setDiscountPercent] = useState(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastSaleData, setLastSaleData] = useState<any>(null);
+  const barcodeBuffer = useRef("");
+  const lastKeyTime = useRef(0);
 
   // Filter products by current store and search term
   // derive available categories and brands
@@ -591,13 +593,48 @@ export default function SellPage({
                   <Input
                     id="sell-search-input"
                     type="search"
-                    placeholder="Пошук товарів..."
+                    placeholder="Пошук товарів або скануйте штрих-код..."
                     value={searchTerm}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setSearchTerm(e.target.value)
-                    }
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.value;
+                      setSearchTerm(value);
+                    }}
+                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                      const now = Date.now();
+
+                      // если время между нажатиями очень маленькое — это сканер
+                      if (now - lastKeyTime.current < 50) {
+                        barcodeBuffer.current += e.key;
+                      } else {
+                        barcodeBuffer.current = e.key;
+                      }
+
+                      lastKeyTime.current = now;
+
+                      // сканер обычно завершает ввод клавишей Enter
+                      if (e.key === "Enter") {
+                        const barcode = barcodeBuffer.current.replace(
+                          "Enter",
+                          ""
+                        );
+
+                        const product = products.find(
+                          (p) => p.barcode === barcode
+                        );
+
+                        if (product) {
+                          addToCart(product);
+                          setSearchTerm("");
+                        } else {
+                          alert("Товар з таким штрих-кодом не знайдено");
+                        }
+
+                        barcodeBuffer.current = "";
+                      }
+                    }}
                     className="pl-10"
                   />
+
                   {/* Shortcut hint */}
                   <div className="absolute right-3 top-2 text-xs text-gray-400 hidden sm:block">
                     ⌘/Ctrl+K
