@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { ProductCatalog } from "./components/product-catalog";
 import SellPage from "./components/sell-page";
-import { FindProductPage } from "./components/find-product-page";
+import FindProductPage from "./components/find-product-page";
 import { AdminDashboard } from "./components/admin-dashboard";
 import LoginPage from "./components/auth/login-page";
 import { useApp } from "./context/app-context";

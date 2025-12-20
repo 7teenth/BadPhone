@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../context/app-context";
 import { formatCurrency } from "@/lib/utils";
-import { ProductForm } from "./product-form";
+import ProductForm from "./product-form";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
 
 interface ProductCatalogProps {

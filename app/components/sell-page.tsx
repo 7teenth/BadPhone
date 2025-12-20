@@ -1,10 +1,20 @@
 "use client";
 
-import type React from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useApp } from "../context/app-context";
-import type { SaleItem } from "@/lib/types";
-import { supabase } from "@/lib/supabase"; // ✅ Используем прямое обращение к Supabase
+import type { SaleItem, Product } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 import {
   ArrowLeft,
   Plus,
@@ -22,163 +32,9 @@ import {
 import { DiscountModal } from "./discount-modal";
 import SaleReceipt from "@/app/components/sale-receipt";
 
-// Custom components instead of shadcn/ui
-const Button = ({
-  children,
-  onClick,
-  variant = "default",
-  size = "default",
-  className = "",
-  disabled = false,
-  ...props
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: "default" | "outline" | "ghost" | "destructive";
-  size?: "default" | "sm" | "icon";
-  className?: string;
-  disabled?: boolean;
-  [key: string]: any;
-}) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    className={`px-4 py-2 rounded font-medium transition-colors ${
-      variant === "outline"
-        ? "border border-gray-300 bg-white hover:bg-gray-50"
-        : variant === "ghost"
-        ? "bg-transparent hover:bg-gray-100"
-        : variant === "destructive"
-        ? "bg-red-600 text-white hover:bg-red-700"
-        : "bg-green-600 text-white hover:bg-green-700"
-    } ${size === "sm" ? "px-2 py-1 text-sm" : size === "icon" ? "p-2" : ""} ${
-      disabled ? "opacity-50 cursor-not-allowed" : ""
-    } ${className}`}
-    {...props}
-  >
-    {children}
-  </button>
-);
+// Импорт или твои кастомные компоненты Button, Badge, Card, Input, Select и т.д.
 
-const Badge = ({
-  children,
-  variant = "default",
-  className = "",
-}: {
-  children: React.ReactNode;
-  variant?: "default" | "secondary" | "outline" | "destructive";
-  className?: string;
-}) => (
-  <span
-    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-      variant === "secondary"
-        ? "bg-gray-100 text-gray-800"
-        : variant === "outline"
-        ? "border border-gray-300 text-gray-700"
-        : variant === "destructive"
-        ? "bg-red-100 text-red-800"
-        : "bg-blue-100 text-blue-800"
-    } ${className}`}
-  >
-    {children}
-  </span>
-);
-
-const Select = ({
-  value,
-  onValueChange,
-  children,
-}: {
-  value: string;
-  onValueChange: (value: string) => void;
-  children: React.ReactNode;
-}) => (
-  <select
-    value={value}
-    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-      onValueChange(e.target.value)
-    }
-    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-  >
-    {children}
-  </select>
-);
-
-const SelectTrigger = ({ children }: { children: React.ReactNode }) => (
-  <>{children}</>
-);
-const SelectValue = () => null;
-const SelectContent = ({ children }: { children: React.ReactNode }) => (
-  <>{children}</>
-);
-const SelectItem = ({
-  value,
-  children,
-}: {
-  value: string;
-  children: React.ReactNode;
-}) => <option value={value}>{children}</option>;
-
-const Card = ({
-  children,
-  className = "",
-  onClick,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  onClick?: () => void;
-}) => (
-  <div
-    onClick={onClick}
-    className={`bg-white rounded-lg shadow border ${className}`}
-  >
-    {children}
-  </div>
-);
-
-const CardContent = ({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) => <div className={`p-4 ${className}`}>{children}</div>;
-
-const CardHeader = ({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) => <div className={`p-4 pb-2 ${className}`}>{children}</div>;
-
-const CardTitle = ({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) => <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>;
-
-const Input = ({
-  className = "",
-  onChange,
-  ...props
-}: {
-  className?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  [key: string]: any;
-}) => (
-  <input
-    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${className}`}
-    onChange={onChange}
-    {...props}
-  />
-);
-
-const Separator = ({ className = "" }: { className?: string }) => (
-  <hr className={`border-gray-200 my-4 ${className}`} />
-);
+const PAGE_SIZE = 20; // количество товаров на одной странице
 
 interface SellPageProps {
   visitId: string;
@@ -200,28 +56,28 @@ export default function SellPage({
   onCreateSale,
   onCreateVisit,
 }: SellPageProps) {
-  const { products, isOnline, currentUser, currentStore } = useApp();
+  const { isOnline, currentUser, currentStore } = useApp();
+  const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const searchRef = useRef<HTMLInputElement | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "terminal">(
     "cash"
   );
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastSaleData, setLastSaleData] = useState<any>(null);
-  const barcodeBuffer = useRef("");
-  const lastKeyTime = useRef(0);
+  const isFetching = useRef(false);
 
-  // Filter products by current store and search term
-  // derive available categories and brands
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  // Фильтр по категориям/брендам
   const categories = Array.from(
     new Set(products.map((p) => p.category))
   ).filter(Boolean);
@@ -229,79 +85,85 @@ export default function SellPage({
     Boolean
   );
 
-  const filteredProducts = products.filter((product) => {
-    // First filter by store - only show products from current user's store
-    const belongsToCurrentStore = currentStore
-      ? product.store_id === currentStore.id
-      : true;
+  // ----------------------
+  // Функция подгрузки товаров с Supabase
+  // ----------------------
+  const fetchProducts = useCallback(
+    async (reset = false) => {
+      if (isFetching.current || (!hasMore && !reset)) return;
+      isFetching.current = true;
 
-    // Then filter by search term
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.includes(searchTerm));
+      const nextPage = reset ? 0 : page;
+      const from = nextPage * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
-    const matchesCategory =
-      categoryFilter === "all" || product.category === categoryFilter;
-    const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
+      let query = supabase
+        .from("products")
+        .select("*")
+        .order("quantity", { ascending: false });
 
-    return (
-      belongsToCurrentStore && matchesSearch && matchesCategory && matchesBrand
-    );
-  });
-
-  // Suggestions for typeahead
-  const nameSuggestions = Array.from(
-    new Set(
-      products
-        .map((p) => p.name)
-        .filter(Boolean)
-        .filter((n) => n.toLowerCase().startsWith(searchTerm.toLowerCase()))
-    )
-  ).slice(0, 6);
-
-  const brandSuggestions = Array.from(
-    new Set(
-      products
-        .map((p) => p.brand)
-        .filter(Boolean)
-        .filter((b) => b.toLowerCase().startsWith(searchTerm.toLowerCase()))
-    )
-  ).slice(0, 6);
-
-  const modelSuggestions = Array.from(
-    new Set(
-      products
-        .map((p) => p.model)
-        .filter(Boolean)
-        .filter((m) => m.toLowerCase().startsWith(searchTerm.toLowerCase()))
-    )
-  ).slice(0, 6);
-
-  // Keyboard shortcut (Ctrl/Cmd+K) to focus search box
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const isK = e.key.toLowerCase() === "k";
-      if ((e.ctrlKey || e.metaKey) && isK) {
-        e.preventDefault();
-        const el = document.getElementById(
-          "sell-search-input"
-        ) as HTMLInputElement | null;
-        if (el) el.focus();
+      // фильтр по магазину
+      if (currentStore) {
+        query = query.eq("store_id", currentStore.id);
       }
-    };
 
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+      // ----------------------
+      // поиск
+      // ----------------------
+      const trimmedSearch = searchTerm.trim();
+      if (trimmedSearch) {
+        // Убрана логика isBarcode, т.к. она некорректно определяла штрихкоды
+        query = query.or(
+          `name.ilike.%${trimmedSearch}%,brand.ilike.%${trimmedSearch}%,model.ilike.%${trimmedSearch}%,barcode.ilike.%${trimmedSearch}%`
+        );
+      }
 
-  const addToCart = useCallback((product: (typeof products)[0]) => {
+      // фильтры по категории и бренду
+      if (categoryFilter !== "all") {
+        query = query.eq("category", categoryFilter);
+      }
+      if (brandFilter !== "all") {
+        query = query.eq("brand", brandFilter);
+      }
+
+      const { data, error } = await query.range(from, to);
+
+      if (error) {
+        console.error(error);
+        isFetching.current = false;
+        return;
+      }
+
+      if (reset) {
+        setProducts(data);
+        setPage(1);
+        setHasMore(data.length === PAGE_SIZE);
+      } else {
+        setProducts((prev) => [...prev, ...data]);
+        setPage((prev) => prev + 1);
+        setHasMore(data.length === PAGE_SIZE);
+      }
+
+      isFetching.current = false;
+    },
+    [page, searchTerm, categoryFilter, brandFilter, currentStore, hasMore]
+  );
+
+  // ----------------------
+  // Загрузка при монтировании и при фильтрах
+  // ----------------------
+  useEffect(() => {
+    fetchProducts(true); // сброс и загрузка
+  }, [searchTerm, categoryFilter, brandFilter, currentStore]);
+
+  // ----------------------
+  // Кнопки и функции работы с корзиной
+  // ----------------------
+  const addToCart = useCallback((product: Product) => {
     if (product.quantity <= 0) {
       alert("Товар закінчився на складі");
       return;
     }
-
     setCart((prev) => {
       const existingItem = prev.find((item) => item.product_id === product.id);
       if (existingItem) {
@@ -337,11 +199,6 @@ export default function SellPage({
   }, []);
 
   const updateCartItemQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeFromCart(productId);
-      return;
-    }
-
     const product = products.find((p) => p.id === productId);
     if (product && newQuantity > product.quantity) {
       alert(`Недостатньо товару на складі. Доступно: ${product.quantity}`);
@@ -361,22 +218,15 @@ export default function SellPage({
     setCart((prev) => prev.filter((item) => item.product_id !== productId));
   };
 
-  const getTotalAmount = () => {
-    const subtotal = cart.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-    return subtotal - discountAmount;
-  };
+  const getSubtotal = () =>
+    cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const getTotalAmount = () => getSubtotal() - discountAmount;
+  const getTotalItems = () =>
+    cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const getSubtotal = () => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  };
-
-  const getTotalItems = () => {
-    return cart.reduce((sum, item) => sum + item.quantity, 0);
-  };
-
+  // ----------------------
+  // Продажа и чек
+  // ----------------------
   const handleCompleteSale = async () => {
     if (cart.length === 0 || !isOnline || isProcessing) return;
 
@@ -385,10 +235,8 @@ export default function SellPage({
       const totalAmount = getTotalAmount();
       const subtotalAmount = getSubtotal();
 
-      // Normalize items and prepare payload for creation
       const normalizedItems = cart.map((item) => {
         const product = products.find((p) => p.id === item.product_id);
-
         const name =
           item.product_name ||
           product?.name ||
@@ -398,7 +246,6 @@ export default function SellPage({
         const price = item.price ?? product?.price ?? 0;
         const model = item.model || product?.model || "";
         const total = item.total ?? price * quantity;
-
         return {
           id: item.product_id,
           name,
@@ -429,11 +276,6 @@ export default function SellPage({
         terminal: "Термінал",
       };
 
-      const payment_cash = paymentMethod === "cash" ? totalAmount : 0;
-      const payment_card = paymentMethod === "terminal" ? totalAmount : 0;
-
-      // normalizedItems already prepared above and will be used for receipt
-
       const receiptData = {
         id: result.id,
         receiptNumber: `RCPT-${Date.now()}`,
@@ -442,8 +284,8 @@ export default function SellPage({
         total: totalAmount,
         subtotal: subtotalAmount,
         paymentMethod: paymentMethodsMap[paymentMethod],
-        payment_cash,
-        payment_card,
+        payment_cash: paymentMethod === "cash" ? totalAmount : 0,
+        payment_card: paymentMethod === "terminal" ? totalAmount : 0,
       };
 
       setLastSaleData(receiptData);
@@ -458,96 +300,41 @@ export default function SellPage({
     }
   };
 
-  const handleBarcodeDetected = (barcode: string) => {
-    const product = products.find((p) => p.barcode === barcode);
-    if (product) {
-      addToCart(product);
-      setShowScanner(false);
-    } else {
-      alert("Товар з таким штрих-кодом не знайдено");
-    }
+  // ----------------------
+  // Подгрузка следующей страницы
+  // ----------------------
+  const loadMore = () => {
+    if (!hasMore) return;
+    fetchProducts();
   };
 
-  // ✅ ИСПРАВЛЕННАЯ функция возврата с прямым обращением к Supabase
-  const handleBack = async () => {
-    if (isDeleting) return;
-
-    if (visitId) {
-      try {
-        setIsDeleting(true);
-        console.log("🗑️ Deleting visit via Supabase:", visitId);
-
-        // ✅ Используем прямое обращение к Supabase вместо API роута
-        const { error } = await supabase
-          .from("visits")
-          .delete()
-          .eq("id", visitId);
-
-        if (error) {
-          console.error("❌ Error deleting visit:", error);
-          alert("Не вдалося видалити візит. Спробуйте пізніше.");
-          return;
-        }
-
-        console.log("✅ Visit deleted successfully");
-      } catch (error) {
-        console.error("❌ Error deleting visit:", error);
-        alert("Не вдалося видалити візит. Спробуйте пізніше.");
-        return;
-      } finally {
-        setIsDeleting(false);
-      }
-    }
-    onBack();
-  };
-
-  const handleNewSale = async () => {
-    // create a new visit for the next sale if parent provided the handler
-    if (typeof onCreateVisit === "function") {
-      try {
-        await onCreateVisit();
-      } catch (err: any) {
-        console.error("Failed to create new visit:", err);
-        alert("Не вдалося створити новий візит. Спробуйте ще раз.");
-        return;
-      }
-    }
-
-    setShowReceipt(false);
-    setLastSaleData(null);
-    setCart([]);
-    setDiscountAmount(0);
-    setPaymentMethod("cash");
-  };
-
-  const handleApplyDiscount = (amount: number, percent: number) => {
-    setDiscountAmount(amount);
-    setDiscountPercent(percent);
-    setShowDiscountModal(false);
-  };
-
-  const handleRemoveDiscount = () => {
-    setDiscountAmount(0);
-    setDiscountPercent(0);
-  };
-
-  const handleReceiptClose = () => {
-    setShowReceipt(false);
-    setLastSaleData(null);
-    onBack();
-  };
-
-  // Если показываем чек, рендерим только его
+  // ----------------------
+  // Если показываем чек
+  // ----------------------
   if (showReceipt && lastSaleData) {
     return (
       <SaleReceipt
         sale={lastSaleData}
-        onNewSale={handleNewSale}
-        onBack={handleReceiptClose}
+        onNewSale={() => {
+          setShowReceipt(false);
+          setLastSaleData(null);
+          setCart([]);
+          setDiscountAmount(0);
+          setPaymentMethod("cash");
+          fetchProducts(true); // обновление товаров
+        }}
+        onBack={() => {
+          setShowReceipt(false);
+          setLastSaleData(null);
+          onBack();
+        }}
       />
     );
   }
 
+  // ----------------------
+  // UI компонента
+  // ----------------------
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -556,8 +343,7 @@ export default function SellPage({
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleBack}
-            disabled={isDeleting}
+            onClick={onBack}
             className="text-white hover:bg-gray-800"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -584,7 +370,7 @@ export default function SellPage({
       <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
         {/* Products Section */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Search and Scanner */}
+          {/* Search */}
           <Card>
             <CardContent className="p-4">
               <div className="flex gap-3 flex-col sm:flex-row">
@@ -595,118 +381,9 @@ export default function SellPage({
                     type="search"
                     placeholder="Пошук товарів або скануйте штрих-код..."
                     value={searchTerm}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const value = e.target.value;
-                      setSearchTerm(value);
-                    }}
-                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                      const now = Date.now();
-
-                      // если время между нажатиями очень маленькое — это сканер
-                      if (now - lastKeyTime.current < 50) {
-                        barcodeBuffer.current += e.key;
-                      } else {
-                        barcodeBuffer.current = e.key;
-                      }
-
-                      lastKeyTime.current = now;
-
-                      // сканер обычно завершает ввод клавишей Enter
-                      if (e.key === "Enter") {
-                        const barcode = barcodeBuffer.current.replace(
-                          "Enter",
-                          ""
-                        );
-
-                        const product = products.find(
-                          (p) => p.barcode === barcode
-                        );
-
-                        if (product) {
-                          addToCart(product);
-                          setSearchTerm("");
-                        } else {
-                          alert("Товар з таким штрих-кодом не знайдено");
-                        }
-
-                        barcodeBuffer.current = "";
-                      }
-                    }}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
                   />
-
-                  {/* Shortcut hint */}
-                  <div className="absolute right-3 top-2 text-xs text-gray-400 hidden sm:block">
-                    ⌘/Ctrl+K
-                  </div>
-
-                  {/* Suggestions dropdown */}
-                  {searchTerm.trim().length > 0 && (
-                    <div className="absolute left-0 mt-2 w-full bg-white border rounded shadow z-20 text-sm p-2">
-                      {nameSuggestions.length > 0 && (
-                        <div className="mb-2">
-                          <div className="text-xs text-gray-500 px-2">
-                            Назви
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {nameSuggestions.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setSearchTerm(s)}
-                                className="px-2 py-1 text-xs border rounded bg-gray-100 hover:bg-gray-200"
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {brandSuggestions.length > 0 && (
-                        <div className="mb-2">
-                          <div className="text-xs text-gray-500 px-2">
-                            Бренди
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {brandSuggestions.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => {
-                                  setSearchTerm(s);
-                                  setBrandFilter(s);
-                                }}
-                                className="px-2 py-1 text-xs border rounded bg-gray-100 hover:bg-gray-200"
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {modelSuggestions.length > 0 && (
-                        <div className="mb-1">
-                          <div className="text-xs text-gray-500 px-2">
-                            Моделі
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {modelSuggestions.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setSearchTerm(s)}
-                                className="px-2 py-1 text-xs border rounded bg-gray-100 hover:bg-gray-200"
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             </CardContent>
@@ -714,7 +391,7 @@ export default function SellPage({
 
           {/* Products Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredProducts.length === 0 ? (
+            {products.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-medium text-gray-600 mb-2">
@@ -725,7 +402,7 @@ export default function SellPage({
                 </p>
               </div>
             ) : (
-              filteredProducts.map((product) => (
+              products.map((product) => (
                 <Card
                   key={product.id}
                   className={`cursor-pointer transition-all hover:shadow-md ${
@@ -772,6 +449,13 @@ export default function SellPage({
               ))
             )}
           </div>
+
+          {/* Load more button */}
+          {hasMore && (
+            <div className="text-center mt-4">
+              <Button onClick={loadMore}>Показати ще</Button>
+            </div>
+          )}
         </div>
 
         {/* Cart Section */}
@@ -857,22 +541,22 @@ export default function SellPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
-              <div className="relative">
-                <Select
-                  value={paymentMethod}
-                  onValueChange={(value) =>
-                    setPaymentMethod(value as "cash" | "terminal")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">🏦 Готівка</SelectItem>
-                    <SelectItem value="terminal">💳 Термінал</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select
+                value={paymentMethod}
+                onValueChange={(v) =>
+                  setPaymentMethod(v as "cash" | "terminal")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Виберіть спосіб оплати" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="cash">🏦 Готівка</SelectItem>
+                  <SelectItem value="terminal">💳 Термінал</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Button
                 variant="outline"
                 onClick={() => setShowDiscountModal(true)}
@@ -914,7 +598,10 @@ export default function SellPage({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={handleRemoveDiscount}
+                          onClick={() => {
+                            setDiscountAmount(0);
+                            setDiscountPercent(0);
+                          }}
                           className="h-5 w-5 p-0 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full"
                         >
                           <X className="h-3 w-3" />
@@ -924,15 +611,13 @@ export default function SellPage({
                   )}
                 </div>
 
-                <div className="border-t border-gray-200 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold text-gray-900">
-                      До сплати:
-                    </span>
-                    <span className="text-xl font-bold text-green-600">
-                      {getTotalAmount().toLocaleString()} ₴
-                    </span>
-                  </div>
+                <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
+                  <span className="text-lg font-semibold text-gray-900">
+                    До сплати:
+                  </span>
+                  <span className="text-xl font-bold text-green-600">
+                    {getTotalAmount().toLocaleString()} ₴
+                  </span>
                 </div>
 
                 <Button
@@ -963,12 +648,17 @@ export default function SellPage({
           </Card>
         </div>
       </div>
-      {/* Discount Modal */}
+
+      {/* DiscountModal */}
       <DiscountModal
         isOpen={showDiscountModal}
         onClose={() => setShowDiscountModal(false)}
         originalAmount={getSubtotal()}
-        onApplyDiscount={handleApplyDiscount}
+        onApplyDiscount={(amount, percent) => {
+          setDiscountAmount(amount);
+          setDiscountPercent(percent);
+          setShowDiscountModal(false);
+        }}
       />
     </div>
   );

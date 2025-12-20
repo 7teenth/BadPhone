@@ -1,7 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import type { JSX } from "react";
+import type React from "react";
+import { FormRow } from "./form-row";
+import BarcodeField from "@/app/components/barcode-field";
+import { StoreField } from "@/app/components/store-field";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useForm, UseFormSetValue } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,8 +21,99 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApp } from "../context/app-context";
+import { Printer } from "lucide-react";
+import BarcodeSticker from "./barcode-sticker";
 
-export interface Product {
+// Zod schema
+const productSchema = z.object({
+  id: z.string().optional(),
+  product_id: z.string().optional(),
+  name: z.string().min(1, "Потрібна назва товару"),
+  category: z.string().min(1, "Потрібна категорія"),
+  price: z.coerce.number().min(0.01, "Ціна має бути більше 0"),
+  quantity: z.coerce.number().min(0, "Кількість не може бути від'ємною"),
+  description: z.string().optional().nullable(),
+  brand: z.string().min(1, "Потрібен бренд"),
+  model: z.string().min(1, "Потрібна модель"),
+  barcode: z.string().optional().nullable(),
+  store_id: z.string().optional().nullable(),
+});
+
+export type ProductFormValues = z.infer<typeof productSchema>;
+
+type FormFieldProps<T extends "input" | "textarea" = "input"> = {
+  label: string;
+  error?: any;
+  as?: T;
+} & (T extends "textarea"
+  ? React.TextareaHTMLAttributes<HTMLTextAreaElement>
+  : React.InputHTMLAttributes<HTMLInputElement>);
+
+const FormField = <T extends "input" | "textarea" = "input">({
+  label,
+  error,
+  as,
+  ...props
+}: FormFieldProps<T>) => {
+  const Tag = (as === "textarea" ? "textarea" : "input") as any; // TS теперь понимает
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      <Tag
+        {...props}
+        className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+      />
+      {error && <p className="text-xs text-red-600">{error.message}</p>}
+    </div>
+  );
+};
+
+type SuggestionsInputProps = {
+  label: string;
+  suggestions: string[];
+  setValue: UseFormSetValue<ProductFormValues>;
+  error?: any;
+  onInput?: React.FormEventHandler<HTMLInputElement>;
+} & React.ComponentPropsWithoutRef<"input">;
+
+const SuggestionsInput = ({
+  label,
+  suggestions,
+  setValue,
+  error,
+  onInput,
+  ...props
+}: SuggestionsInputProps) => (
+  <div>
+    <label className="block text-sm font-medium mb-1">{label}</label>
+    <div>
+      <input
+        className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+        onInput={onInput}
+        {...props}
+      />
+      <div className="mt-2 flex flex-wrap gap-2">
+        {suggestions.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() =>
+              setValue(props.name as keyof ProductFormValues, s, {
+                shouldDirty: true,
+              })
+            }
+            className="text-xs px-2 py-1 bg-muted border border-border rounded-md hover:bg-muted/80"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+    {error && <p className="text-xs text-red-600">{error.message}</p>}
+  </div>
+);
+
+interface Product {
   id?: string;
   product_id?: string;
   name: string;
@@ -29,13 +127,35 @@ export interface Product {
   store_id?: string | null;
 }
 
-interface ProductFormProps {
+interface Props {
   product?: Partial<Product>;
   onSubmit: (productData: Product) => void;
   onCancel: () => void;
 }
 
-export function ProductForm({ product, onSubmit, onCancel }: ProductFormProps) {
+function generateBarcodeFromId(id: string): string {
+  const cleanId = id.replace(/-/g, "").toUpperCase();
+  let numericCode = "";
+
+  for (let i = 0; i < Math.min(cleanId.length, 12); i++) {
+    const char = cleanId[i];
+    numericCode += /\d/.test(char)
+      ? char
+      : ((char.charCodeAt(0) - 55) % 10).toString();
+  }
+
+  numericCode = numericCode.padEnd(12, "0").slice(0, 12);
+
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += Number.parseInt(numericCode[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+
+  return numericCode + checkDigit;
+}
+
+export default function ProductForm({ product, onSubmit, onCancel }: Props) {
   const {
     stores,
     currentUser,
@@ -44,330 +164,315 @@ export function ProductForm({ product, onSubmit, onCancel }: ProductFormProps) {
     createCategory,
   } = useApp();
 
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "",
-    price: "",
-    quantity: "",
-    description: "",
-    brand: "",
-    model: "",
-    barcode: "",
-    store_id: currentUser?.store_id ?? "",
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [generatedBarcode, setGeneratedBarcode] = useState<string | null>(null);
+  const barcodeRef = useRef<HTMLInputElement | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    getValues,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: "",
+      category: "",
+      price: 0,
+      quantity: 0,
+      description: "",
+      brand: "",
+      model: "",
+      barcode: "",
+      store_id: currentUser?.store_id ?? "",
+    },
+    mode: "onSubmit",
   });
 
-  const [loaded, setLoaded] = useState(false);
+  const knownCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(products.map((p) => p.category).filter(Boolean))
+      ) as string[],
+    [products]
+  );
+  const knownBrands = useMemo(
+    () =>
+      Array.from(
+        new Set(products.map((p) => p.brand).filter(Boolean))
+      ) as string[],
+    [products]
+  );
+  const knownModels = useMemo(
+    () =>
+      Array.from(
+        new Set(products.map((p) => p.model).filter(Boolean))
+      ) as string[],
+    [products]
+  );
+
+  // Initialize form with product data
+  useEffect(() => {
+    if (!product) return;
+    reset({
+      name: product.name ?? "",
+      category: product.category ?? "",
+      price: product.price ?? 0,
+      quantity: product.quantity ?? 0,
+      description: product.description ?? "",
+      brand: product.brand ?? "",
+      model: product.model ?? "",
+      barcode: product.barcode ?? "",
+      store_id: product.store_id ?? currentUser?.store_id ?? "",
+    });
+
+    if (product.id && product.barcode) {
+      setGeneratedBarcode(product.barcode);
+    } else if (product.id) {
+      const barcode = generateBarcodeFromId(product.id);
+      setGeneratedBarcode(barcode);
+      setValue("barcode", barcode, { shouldTouch: false });
+    }
+  }, [product, reset, currentUser?.store_id, setValue]);
 
   useEffect(() => {
-    const loadProduct = async () => {
-      let defaults: Partial<typeof formData> = {};
+    if (!product) {
+      setValue("store_id", currentUser?.store_id ?? "", { shouldTouch: false });
+    }
+  }, [currentUser?.store_id, product, setValue]);
+
+  useEffect(() => {
+    const subscription = watch((value) => {
       try {
-        const raw = localStorage.getItem("lastProductDefaults");
-        if (raw) defaults = JSON.parse(raw);
+        const toSave = {
+          name: value.name ?? "",
+          category: value.category ?? "",
+          brand: value.brand ?? "",
+          model: value.model ?? "",
+          price: value.price ?? 0,
+          quantity: value.quantity ?? 0,
+          barcode: value.barcode ?? "",
+          store_id: value.store_id ?? currentUser?.store_id ?? "",
+        };
+        localStorage.setItem("lastProductDefaults", JSON.stringify(toSave));
       } catch {}
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, currentUser?.store_id]);
 
-      if (!product) {
-        setFormData((prev) => ({ ...prev, ...defaults }));
-        setLoaded(true);
-        return;
-      }
-
-      const productId = product.id ?? (product as any).product_id;
-
-      let fullProduct: Partial<Product> | undefined = products.find(
-        (p) => p.id === productId
-      );
-
-      if (!fullProduct && productId) {
-        try {
-          const { data: dbProduct } = await supabase
-            .from("products")
-            .select("*")
-            .eq("id", productId)
-            .maybeSingle();
-          fullProduct = dbProduct ?? product;
-        } catch {
-          fullProduct = product;
-        }
-      }
-
-      if (fullProduct) {
-        setFormData({
-          name: fullProduct.name ?? "",
-          category: fullProduct.category ?? "",
-          price: fullProduct.price != null ? fullProduct.price.toString() : "",
-          quantity:
-            fullProduct.quantity != null ? fullProduct.quantity.toString() : "",
-          description: fullProduct.description ?? "",
-          brand: fullProduct.brand ?? "",
-          model: fullProduct.model ?? "",
-          barcode: fullProduct.barcode ?? "",
-          store_id: fullProduct.store_id ?? currentUser?.store_id ?? "",
-        });
-      } else {
-        setFormData((prev) => ({ ...prev, ...defaults }));
-      }
-
-      setLoaded(true);
+  const createOnInputFor =
+    (name: keyof ProductFormValues) =>
+    (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const v = e.currentTarget.value;
+      setValue(name, v as never, { shouldValidate: false, shouldDirty: true });
     };
 
-    loadProduct();
-  }, [product, products, currentUser]);
+  const onBarcodeInput = (e: React.FormEvent<HTMLInputElement>) => {
+    const v = e.currentTarget.value;
+    setValue("barcode", v, { shouldDirty: true });
+    setGeneratedBarcode(v);
+  };
 
-  if (!loaded) return <p>Завантаження продукту...</p>;
+  const onBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") e.currentTarget.blur();
+  };
 
-  const knownCategories = Array.from(
-    new Set(products.map((p) => p.category))
-  ).filter(Boolean) as string[];
-  const knownBrands = Array.from(new Set(products.map((p) => p.brand))).filter(
-    Boolean
-  ) as string[];
-  const knownModels = Array.from(new Set(products.map((p) => p.model))).filter(
-    Boolean
-  ) as string[];
+  const handleGenerateBarcode = () => {
+    const id = product?.id || crypto.randomUUID();
+    const barcode = generateBarcodeFromId(id);
+    setValue("barcode", barcode, { shouldDirty: true });
+    setGeneratedBarcode(barcode);
+  };
 
-  const brandQuery = formData.brand.toLowerCase().trim();
-  const modelQuery = formData.model.toLowerCase().trim();
-
-  const brandSuggestions = knownBrands
-    .filter((b) => b.toLowerCase().includes(brandQuery))
-    .slice(0, 8);
-
-  const modelsForBrand = formData.brand
-    ? products
-        .filter((p) => p.brand?.toLowerCase() === formData.brand.toLowerCase())
-        .map((p) => p.model)
-    : [];
-
-  const modelPool = modelsForBrand.length ? modelsForBrand : knownModels;
-  const modelSuggestions = Array.from(new Set(modelPool))
-    .filter((m) => m?.toLowerCase().includes(modelQuery))
-    .slice(0, 8);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const { name, category, price, quantity, brand, model } = formData;
-
-    if (!name || !category || !brand || !model) {
-      alert("Заповніть всі обов'язкові поля");
-      return;
-    }
-
-    const parsedPrice = parseFloat(price);
-    const parsedQuantity = parseInt(quantity, 10);
-
-    if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      alert("Введіть коректну ціну");
-      return;
-    }
-    if (isNaN(parsedQuantity) || parsedQuantity < 0) {
-      alert("Введіть коректну кількість");
-      return;
-    }
-
-    const typedCategory = category.trim();
+  const submit = (data: ProductFormValues) => {
+    const typedCategory = data.category.trim();
     if (
+      typedCategory &&
       !persistedCategories.some(
         (c) => c.name.toLowerCase() === typedCategory.toLowerCase()
-      ) &&
-      typedCategory
+      )
     ) {
       createCategory(typedCategory).catch(console.warn);
     }
 
-    const productData: Product = {
-      ...formData,
-      name: name.trim(),
+    onSubmit({
+      ...data,
+      name: data.name.trim(),
       category: typedCategory,
-      price: parsedPrice,
-      quantity: parsedQuantity,
-      brand: brand.trim(),
-      model: model.trim(),
-      description: formData.description.trim(),
-      barcode: formData.barcode.trim() || null,
-      store_id: formData.store_id || null,
-    };
-
-    try {
-      localStorage.setItem("lastProductDefaults", JSON.stringify(productData));
-    } catch {}
-
-    onSubmit(productData);
+      brand: data.brand.trim(),
+      model: data.model.trim(),
+      description: data.description?.trim() || "",
+      barcode: data.barcode?.trim() || null,
+      store_id: data.store_id || null,
+    });
   };
 
-  const InputField = ({
-    label,
-    value,
-    onChange,
-    type = "text",
-    step,
-    min,
-    list,
-    suggestions = [],
-    setValue,
-  }: {
-    label: string;
-    value: string;
-    onChange: (val: string) => void;
-    type?: string;
-    step?: number;
-    min?: number;
-    list?: string[];
-    suggestions?: string[];
-    setValue?: (val: string) => void;
-  }) => (
-    <div>
-      <label className="block text-sm font-medium mb-1">{label}</label>
-      <input
-        type={type}
-        step={step}
-        min={min}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        list={list && list.length > 0 ? `${label}-list` : undefined}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        placeholder={label}
-      />
-      {list && (
-        <datalist id={`${label}-list`}>
-          {list.map((item) => (
-            <option key={item} value={item} />
-          ))}
-        </datalist>
-      )}
-      {suggestions.length > 0 && setValue && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setValue(s)}
-              className="text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const brandQuery = watch("brand")?.toLowerCase().trim() ?? "";
+  const modelQuery = watch("model")?.toLowerCase().trim() ?? "";
+
+  const brandSuggestions = useMemo(() => {
+    if (!brandQuery) return knownBrands.slice(0, 8);
+    return knownBrands
+      .filter((b) => b.toLowerCase().includes(brandQuery))
+      .slice(0, 8);
+  }, [brandQuery, knownBrands]);
+
+  const modelSuggestions = useMemo(() => {
+    const currentBrand = watch("brand")?.toLowerCase().trim() ?? "";
+    const modelsForBrand = currentBrand
+      ? products
+          .filter((p) => p.brand?.toLowerCase() === currentBrand)
+          .map((p) => p.model)
+          .filter(Boolean)
+      : [];
+    const modelPool = modelsForBrand.length ? modelsForBrand : knownModels;
+    if (!modelQuery) return Array.from(new Set(modelPool)).slice(0, 8);
+    return Array.from(new Set(modelPool))
+      .filter((m) => m?.toLowerCase().includes(modelQuery))
+      .slice(0, 8);
+  }, [modelQuery, knownModels, products, watch]);
+
+  const currentBarcode = watch("barcode");
+  const currentName = watch("name");
+  const currentPrice = watch("price");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {product ? "Редагувати товар" : "Додати новий товар"}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField
-              label="Назва товару *"
-              value={formData.name}
-              onChange={(v) => setFormData({ ...formData, name: v })}
-            />
-            <InputField
-              label="Категорія *"
-              value={formData.category}
-              onChange={(v) => setFormData({ ...formData, category: v })}
-              list={knownCategories}
-            />
-          </div>
+    <>
+      <Card className="max-w-4xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">
+            {product ? "Редагувати товар" : "Додати новий товар"}
+          </CardTitle>
+        </CardHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField
-              label="Бренд *"
-              value={formData.brand}
-              onChange={(v) => setFormData({ ...formData, brand: v })}
-              list={knownBrands}
-              suggestions={brandSuggestions}
-              setValue={(v) => setFormData({ ...formData, brand: v })}
-            />
-            <InputField
-              label="Модель *"
-              value={formData.model}
-              onChange={(v) => setFormData({ ...formData, model: v })}
-              list={knownModels}
-              suggestions={modelSuggestions}
-              setValue={(v) => setFormData({ ...formData, model: v })}
-            />
-          </div>
+        <CardContent>
+          <form onSubmit={handleSubmit(submit)} className="space-y-6">
+            {/* Основна інформація */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                label="Назва товару *"
+                {...register("name")}
+                placeholder="Введіть назву"
+                error={errors.name}
+                onInput={createOnInputFor("name")}
+              />
+              <FormField
+                label="Категорія *"
+                {...register("category")}
+                placeholder="Введіть категорію"
+                error={errors.category}
+                onInput={createOnInputFor("category")}
+              />
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField
-              label="Ціна (₴) *"
-              type="number"
-              step={0.01}
-              min={0}
-              value={formData.price}
-              onChange={(v) => setFormData({ ...formData, price: v })}
-            />
-            <InputField
-              label="Кількість *"
-              type="number"
-              step={1}
-              min={0}
-              value={formData.quantity}
-              onChange={(v) => setFormData({ ...formData, quantity: v })}
-            />
-          </div>
+            {/* Бренд та модель */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <SuggestionsInput
+                label="Бренд *"
+                {...register("brand")}
+                placeholder="Введіть бренд"
+                error={errors.brand}
+                suggestions={brandSuggestions}
+                onInput={createOnInputFor("brand")}
+                setValue={setValue}
+              />
+              <SuggestionsInput
+                label="Модель *"
+                {...register("model")}
+                placeholder="Введіть модель"
+                error={errors.model}
+                suggestions={modelSuggestions}
+                onInput={createOnInputFor("model")}
+                setValue={setValue}
+              />
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField
-              label="Штрих-код"
-              value={formData.barcode}
-              onChange={(v) => setFormData({ ...formData, barcode: v })}
-            />
-            {currentUser?.role === "owner" && (
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Магазин
-                </label>
-                <Select
-                  value={formData.store_id ?? ""}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, store_id: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Виберіть магазин" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((store) => (
-                      <SelectItem key={store.id} value={store.id}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
+            {/* Ціна та кількість */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                label="Ціна (₴) *"
+                type="number"
+                step={0.01}
+                min={0}
+                {...register("price", { valueAsNumber: true })}
+                placeholder="0.00"
+                error={errors.price}
+                onInput={createOnInputFor("price")}
+              />
+              <FormField
+                label="Кількість *"
+                type="number"
+                step={1}
+                min={0}
+                {...register("quantity", { valueAsNumber: true })}
+                placeholder="0"
+                error={errors.quantity}
+                onInput={createOnInputFor("quantity")}
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Опис</label>
-            <Textarea
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
+            {/* Штрих-код та магазин */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <BarcodeField
+                ref={barcodeRef}
+                value={currentBarcode ?? undefined}
+                onInput={onBarcodeInput}
+                onKeyDown={onBarcodeKeyDown}
+                onGenerate={handleGenerateBarcode}
+                onPrint={() => setShowBarcodeModal(true)}
+                error={errors.barcode}
+              />
+              <StoreField
+                currentUser={currentUser}
+                stores={stores}
+                getValues={getValues}
+                setValue={setValue}
+              />
+            </div>
+
+            {/* Опис */}
+            <FormField
+              label="Опис"
+              as="textarea"
+              {...register("description")}
               placeholder="Введіть опис товару"
-              rows={3}
+              onInput={createOnInputFor("description")}
+              rows={4}
             />
-          </div>
 
-          <div className="flex justify-end gap-4 pt-4">
-            <Button type="button" variant="secondary" onClick={onCancel}>
-              Скасувати
-            </Button>
-            <Button type="submit" className="bg-green-600 hover:bg-green-700">
-              {product ? "Зберегти зміни" : "Додати товар"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+            {/* Дії */}
+            <div className="flex justify-end gap-3 pt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={isSubmitting}
+              >
+                Скасувати
+              </Button>
+              <Button
+                type="submit"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                disabled={isSubmitting}
+              >
+                {product ? "Зберегти зміни" : "Додати товар"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {showBarcodeModal && currentBarcode && (
+        <BarcodeSticker
+          barcode={currentBarcode}
+          productName={currentName || "Товар"}
+          price={currentPrice || 0}
+          onClose={() => setShowBarcodeModal(false)}
+        />
+      )}
+    </>
   );
 }
