@@ -391,11 +391,52 @@ export default function SellPage({
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
+                    ref={searchRef}
                     id="sell-search-input"
                     type="search"
                     placeholder="Пошук товарів або скануйте штрих-код..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const val = searchTerm.trim();
+                      if (!val) return;
+
+                      // Try to find exact barcode match among already loaded products
+                      const exactLocal = products.find((p) => p.barcode === val);
+                      if (exactLocal) {
+                        addToCart(exactLocal);
+                        setSearchTerm("");
+                        setTimeout(() => searchRef.current?.focus(), 20);
+                        return;
+                      }
+
+                      // Otherwise, try to fetch exact match by barcode from the backend
+                      try {
+                        const { data, error } = await supabase
+                          .from("products")
+                          .select("*")
+                          .eq("barcode", val)
+                          .limit(1)
+                          .single();
+
+                        if (error) {
+                          // no exact barcode match — keep the search text so the user can see it
+                          return;
+                        }
+
+                        if (data) {
+                          addToCart(data as Product);
+                          setSearchTerm("");
+                          // refresh products so UI reflects any quantity changes
+                          await fetchProducts(true);
+                          setTimeout(() => searchRef.current?.focus(), 20);
+                        }
+                      } catch (err) {
+                        console.error("Barcode lookup failed", err);
+                      }
+                    }}
                     className="pl-10"
                   />
                 </div>

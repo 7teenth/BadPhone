@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
@@ -45,6 +46,8 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [sellerFilter, setSellerFilter] = useState("all");
   const [storeFilter, setStoreFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState<string | null>(null);
+  const [dateTo, setDateTo] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("list");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -66,6 +69,18 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         const saleDate = new Date(sale.created_at);
         return saleDate >= startOfDay && sale.seller_id === currentUser.id;
       });
+    }
+
+    // Apply date range filter (only meaningful for owners, but it won't hurt sellers since their data is already constrained)
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      salesData = salesData.filter((s) => new Date(s.created_at) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      salesData = salesData.filter((s) => new Date(s.created_at) <= to);
     }
 
     return salesData.filter((sale) => {
@@ -91,6 +106,8 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
     sellerFilter,
     storeFilter,
     currentUser,
+    dateFrom,
+    dateTo,
   ]);
 
   const getSalesStats = () => {
@@ -220,8 +237,8 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
         {currentUser?.role === "owner" && (
           <Card>
             <CardContent className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div className="relative">
+              <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+                <div className="relative md:col-span-2">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
                     type="search"
@@ -269,6 +286,28 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     ))}
                   </SelectContent>
                 </Select>
+
+                {/* Date range filters (owners only) */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={dateFrom || ""}
+                    onChange={(e) => setDateFrom(e.target.value || null)}
+                    className="w-full"
+                    aria-label="Дата з"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={dateTo || ""}
+                    onChange={(e) => setDateTo(e.target.value || null)}
+                    className="w-full"
+                    aria-label="Дата по"
+                  />
+                </div>
+
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -276,6 +315,8 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                     setPaymentFilter("all");
                     setSellerFilter("all");
                     setStoreFilter("all");
+                    setDateFrom(null);
+                    setDateTo(null);
                   }}
                   className="bg-transparent"
                 >
@@ -391,87 +432,59 @@ export function SalesHistory({ onBack }: SalesHistoryProps) {
                 </p>
               </Card>
             ) : (
-              <div className="space-y-4">
-                {filteredSales.map((sale) => {
-                  const store = stores.find((s) => s.id === sale.store_id);
-                  return (
-                    <Card
-                      key={sale.id}
-                      className="hover:shadow-md transition-shadow"
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold">
-                                Чек #{sale.receipt_number}
-                              </h3>
+              <Card>
+                <CardContent>
+                  <Table>
+                    <TableCaption>Історія продажів</TableCaption>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата</TableHead>
+                        <TableHead>Чек №</TableHead>
+                        <TableHead>Продавець</TableHead>
+                        <TableHead>Магазин</TableHead>
+                        <TableHead className="text-center">Товари</TableHead>
+                        <TableHead>Спосіб оплати</TableHead>
+                        <TableHead className="text-right">Сума</TableHead>
+                        <TableHead className="text-right">Дія</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredSales.map((sale) => {
+                        const store = stores.find((s) => s.id === sale.store_id);
+                        return (
+                          <TableRow key={sale.id}>
+                            <TableCell>{formatDate(sale.created_at)}</TableCell>
+                            <TableCell>{sale.receipt_number}</TableCell>
+                            <TableCell>{sale.seller?.name || "-"}</TableCell>
+                            <TableCell>{store?.name || "-"}</TableCell>
+                            <TableCell className="text-center">{sale.items_data?.length || 0}</TableCell>
+                            <TableCell>
                               <Badge
-                                variant={
-                                  sale.payment_method === "cash"
-                                    ? "default"
-                                    : "secondary"
-                                }
                                 className={
                                   sale.payment_method === "cash"
                                     ? "bg-orange-600"
                                     : "bg-purple-600"
                                 }
                               >
-                                {sale.payment_method === "cash" ? (
-                                  <>
-                                    <Banknote className="h-3 w-3 mr-1" />
-                                    Готівка
-                                  </>
-                                ) : (
-                                  <>
-                                    <CreditCard className="h-3 w-3 mr-1" />
-                                    Термінал
-                                  </>
-                                )}
+                                {sale.payment_method === "cash" ? "Готівка" : "Термінал"}
                               </Badge>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-gray-600" />
-                                <span>{formatDate(sale.created_at)}</span>
-                              </div>
-                              {sale.seller && (
-                                <div className="flex items-center gap-2">
-                                  <User className="h-4 w-4 text-gray-600" />
-                                  <span>{sale.seller.name}</span>
-                                </div>
-                              )}
-                              {store && (
-                                <div className="flex items-center gap-2">
-                                  <Package className="h-4 w-4 text-gray-600" />
-                                  <span>{store.name}</span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="mt-2 text-sm text-gray-600">
-                              Товарів: {sale.items_data?.length || 0} шт
-                            </div>
-                          </div>
-                          <div className="text-right ml-4">
-                            <div className="text-2xl font-bold text-green-600 mb-2">
+                            </TableCell>
+                            <TableCell className="font-bold text-right">
                               {sale.total_amount.toLocaleString()} ₴
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewSale(sale)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              Переглянути
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button size="sm" variant="outline" onClick={() => handleViewSale(sale)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                Переглянути
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 

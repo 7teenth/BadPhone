@@ -32,6 +32,8 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { sales, users, stores, products, getDailySalesStats, getTotalStats, currentUser } = useApp()
   const [selectedPeriod, setSelectedPeriod] = useState("week")
   const [selectedStore, setSelectedStore] = useState("all")
+  const [dateFrom, setDateFrom] = useState<string | null>(null)
+  const [dateTo, setDateTo] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("overview")
   const [shifts, setShifts] = useState<any[]>([])
 
@@ -91,7 +93,43 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   }
 
   const filteredSales = getFilteredData()
-  const dailyStats = getDailySalesStats()
+
+  // Compute daily stats locally but respect selected store and optional date range filters
+  const dailyStats = (() => {
+    const salesForDaily = sales.filter((sale) => {
+      const saleDate = new Date(sale.created_at);
+
+      if (selectedStore !== "all" && sale.store_id !== selectedStore) return false;
+
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        from.setHours(0, 0, 0, 0);
+        if (saleDate < from) return false;
+      }
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (saleDate > to) return false;
+      }
+
+      return true;
+    });
+
+    if (!salesForDaily || salesForDaily.length === 0) return [];
+
+    const statsMap: Record<string, { salesCount: number; totalAmount: number } > = {};
+    salesForDaily.forEach((sale) => {
+      const date = new Date(sale.created_at).toISOString().split("T")[0];
+      if (!statsMap[date]) statsMap[date] = { salesCount: 0, totalAmount: 0 };
+      statsMap[date].salesCount += 1;
+      statsMap[date].totalAmount += sale.total_amount;
+    });
+
+    return Object.entries(statsMap)
+      .map(([date, stats]) => ({ date, salesCount: stats.salesCount, totalAmount: stats.totalAmount }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  })();
+
   const totalStats = getTotalStats()
 
   // Статистика по магазинам
@@ -247,19 +285,47 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             </SelectContent>
           </Select>
           {currentUser?.role === "owner" && (
-            <Select value={selectedStore} onValueChange={setSelectedStore}>
-              <SelectTrigger className="w-48 bg-gray-800 border-gray-600 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Всі магазини</SelectItem>
-                {stores.map((store) => (
-                  <SelectItem key={store.id} value={store.id}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <>
+              <Select value={selectedStore} onValueChange={setSelectedStore}>
+                <SelectTrigger className="w-48 bg-gray-800 border-gray-600 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Всі магазини</SelectItem>
+                  {stores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Date range filters for admin */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFrom || ""}
+                  onChange={(e) => setDateFrom(e.target.value || null)}
+                  className="bg-gray-800 text-white rounded px-2 py-1"
+                />
+                <input
+                  type="date"
+                  value={dateTo || ""}
+                  onChange={(e) => setDateTo(e.target.value || null)}
+                  className="bg-gray-800 text-white rounded px-2 py-1"
+                />
+                <Button
+                  variant="outline"
+                  className="bg-transparent"
+                  onClick={() => {
+                    setDateFrom(null)
+                    setDateTo(null)
+                  }}
+                >
+                  Скинути дату
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </header>
