@@ -481,31 +481,30 @@ export default function LoginPage() {
                   Завантаження магазинів...
                 </div>
               ) : (
-                <Select
-                  value={formData.storeId}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, storeId: value }))
-                  }
-                  disabled={isLoading || !isOnline}
-                >
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-white/10 [&>span]:text-white/50 data-[state=open]:border-white/30">
-                    <SelectValue placeholder="Виберіть магазин" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#1a2535] border-white/10">
-                    {(appStores || []).map((store: any) => (
-                      <SelectItem
+                <div className="flex flex-wrap gap-2">
+                  {(appStores || []).map((store: any) => {
+                    const selected = formData.storeId === store.id;
+                    return (
+                      <button
                         key={store.id}
-                        value={store.id}
-                        className="text-white/80 focus:bg-white/10 focus:text-white"
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, storeId: store.id }))
+                        }
+                        disabled={isLoading || !isOnline}
+                        aria-pressed={selected}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md border transition-colors ${
+                          selected
+                            ? "bg-white/10 border-white/20 text-white"
+                            : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
+                        }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <Store className="h-4 w-4 text-white/50" />
-                          <span>{store.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                        <Store className="h-4 w-4 text-white/50" />
+                        <span className="text-sm line-clamp-1">{store.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
