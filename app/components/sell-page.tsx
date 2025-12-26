@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Percent,
   X,
+  Loader2,
 } from "lucide-react";
 import { DiscountModal } from "./discount-modal";
 import SaleReceipt from "@/app/components/sale-receipt";
@@ -68,6 +69,7 @@ export default function SellPage({
   const [isProcessing, setIsProcessing] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -92,6 +94,7 @@ export default function SellPage({
     async (reset = false) => {
       if (isFetching.current || (!hasMore && !reset)) return;
       isFetching.current = true;
+      setIsLoading(true);
 
       const nextPage = reset ? 0 : page;
       const from = nextPage * PAGE_SIZE;
@@ -99,26 +102,21 @@ export default function SellPage({
 
       let query = supabase
         .from("products")
-        .select("*")
-        .order("quantity", { ascending: false });
+        .select("*", { count: "exact" })
+        .order("name", { ascending: true });
 
-      // фильтр по магазину
+      // фильтр по магазину (по умолчанию — текущий магазин)
       if (currentStore) {
         query = query.eq("store_id", currentStore.id);
       }
 
-      // ----------------------
-      // поиск
-      // ----------------------
       const trimmedSearch = searchTerm.trim();
       if (trimmedSearch) {
-        // Убрана логика isBarcode, т.к. она некорректно определяла штрихкоды
         query = query.or(
           `name.ilike.%${trimmedSearch}%,brand.ilike.%${trimmedSearch}%,model.ilike.%${trimmedSearch}%,barcode.ilike.%${trimmedSearch}%`
         );
       }
 
-      // фильтры по категории и бренду
       if (categoryFilter !== "all") {
         query = query.eq("category", categoryFilter);
       }
@@ -126,34 +124,45 @@ export default function SellPage({
         query = query.eq("brand", brandFilter);
       }
 
-      const { data, error } = await query.range(from, to);
+      const { data, error, count } = await query.range(from, to);
 
       if (error) {
-        console.error(error);
+        console.error("Error fetching products:", error);
         isFetching.current = false;
+        setIsLoading(false);
         return;
       }
 
       if (reset) {
-        setProducts(data);
+        setProducts(data || []);
         setPage(1);
-        setHasMore(data.length === PAGE_SIZE);
+        setHasMore((data?.length || 0) === PAGE_SIZE);
       } else {
-        setProducts((prev) => [...prev, ...data]);
+        setProducts((prev) => [...prev, ...(data || [])]);
         setPage((prev) => prev + 1);
-        setHasMore(data.length === PAGE_SIZE);
+        setHasMore((data?.length || 0) === PAGE_SIZE);
       }
 
       isFetching.current = false;
+      setIsLoading(false);
     },
     [page, searchTerm, categoryFilter, brandFilter, currentStore, hasMore]
   );
 
   // ----------------------
-  // Загрузка при монтировании и при фильтрах
+  // Загрузка при монтировании и при фильтрах (debounced like FindProductPage)
   // ----------------------
   useEffect(() => {
-    fetchProducts(true); // сброс и загрузка
+    // reset paging and list then fetch after a short debounce
+    setPage(0);
+    setHasMore(true);
+    setProducts([]);
+
+    const timer = setTimeout(() => {
+      fetchProducts(true);
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [searchTerm, categoryFilter, brandFilter, currentStore]);
 
   // ----------------------
@@ -304,8 +313,9 @@ export default function SellPage({
   // Подгрузка следующей страницы
   // ----------------------
   const loadMore = () => {
-    if (!hasMore) return;
-    fetchProducts();
+    if (!isLoading && hasMore) {
+      fetchProducts();
+    }
   };
 
   // ----------------------
@@ -397,46 +407,6 @@ export default function SellPage({
                     placeholder="Пошук товарів або скануйте штрих-код..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key !== "Enter") return;
-                      e.preventDefault();
-                      const val = searchTerm.trim();
-                      if (!val) return;
-
-                      // Try to find exact barcode match among already loaded products
-                      const exactLocal = products.find((p) => p.barcode === val);
-                      if (exactLocal) {
-                        addToCart(exactLocal);
-                        setSearchTerm("");
-                        setTimeout(() => searchRef.current?.focus(), 20);
-                        return;
-                      }
-
-                      // Otherwise, try to fetch exact match by barcode from the backend
-                      try {
-                        const { data, error } = await supabase
-                          .from("products")
-                          .select("*")
-                          .eq("barcode", val)
-                          .limit(1)
-                          .single();
-
-                        if (error) {
-                          // no exact barcode match — keep the search text so the user can see it
-                          return;
-                        }
-
-                        if (data) {
-                          addToCart(data as Product);
-                          setSearchTerm("");
-                          // refresh products so UI reflects any quantity changes
-                          await fetchProducts(true);
-                          setTimeout(() => searchRef.current?.focus(), 20);
-                        }
-                      } catch (err) {
-                        console.error("Barcode lookup failed", err);
-                      }
-                    }}
                     className="pl-10"
                   />
                 </div>
@@ -446,7 +416,11 @@ export default function SellPage({
 
           {/* Products Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {products.length === 0 ? (
+            {isLoading && products.length === 0 ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : products.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-medium text-gray-600 mb-2">
