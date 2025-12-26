@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { DiscountModal } from "./discount-modal";
 import SaleReceipt from "@/app/components/sale-receipt";
+import { useToast } from "@/hooks/use-toast";
 
 // Импорт или твои кастомные компоненты Button, Badge, Card, Input, Select и т.д.
 
@@ -78,6 +79,8 @@ export default function SellPage({
   const isFetching = useRef(false);
 
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const lastAutoAddRef = useRef<string | null>(null);
+  const { toast } = useToast();
 
   // Фильтр по категориям/брендам
   const categories = Array.from(
@@ -137,6 +140,33 @@ export default function SellPage({
         setProducts(data || []);
         setPage(1);
         setHasMore((data?.length || 0) === PAGE_SIZE);
+
+        // Auto-add to cart when a single explicit search result is returned
+        const trimmedSearch = searchTerm.trim();
+        if (
+          trimmedSearch &&
+          (data?.length || 0) === 1 &&
+          lastAutoAddRef.current !== trimmedSearch
+        ) {
+          const single = data![0] as Product;
+          if (single.quantity > 0) {
+            try {
+              addToCart(single);
+              toast({
+                title: "Додано в кошик",
+                description: `${single.name} — ${single.brand} ${single.model}`,
+              });
+              setSearchTerm("");
+              // refresh products to reflect quantity changes
+              await fetchProducts(true);
+              setTimeout(() => searchRef.current?.focus(), 20);
+            } catch (err) {
+              console.error("Auto-add failed", err);
+            }
+          }
+
+          lastAutoAddRef.current = trimmedSearch;
+        }
       } else {
         setProducts((prev) => [...prev, ...(data || [])]);
         setPage((prev) => prev + 1);
@@ -157,6 +187,8 @@ export default function SellPage({
     setPage(0);
     setHasMore(true);
     setProducts([]);
+    // reset the last auto-add guard so new queries can auto-add again
+    lastAutoAddRef.current = null;
 
     const timer = setTimeout(() => {
       fetchProducts(true);
