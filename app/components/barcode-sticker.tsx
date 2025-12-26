@@ -72,12 +72,14 @@ export default function BarcodeSticker({
               line-height: 1.1;
               max-height: 6mm;
               overflow: hidden;
+              margin-left: 4mm;
             }
 
             .brand {
               font-size: 6pt;
               font-weight: bold;
               line-height: 1;
+              margin-left: 4mm;
             }
 
             svg {
@@ -109,65 +111,33 @@ export default function BarcodeSticker({
         </button>
 
         {/* ПРЕВЬЮ */}
-<div
-  className="sticker-preview border"
-  style={{
-    width: "320px",   // 40mm → масштаб 4×
-    height: "200px",  // 25mm → масштаб 4×
-    paddingTop: "4px",
-    paddingRight: "8px",
-    paddingBottom: "4px",
-    paddingLeft: "0px",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "white",
-    boxSizing: "border-box",
-  }}
->
-  {/* Название продукта */}
-  <div
-    style={{
-      fontSize: "18pt",
-      fontWeight: "bold",
-      textAlign: "center",
-      lineHeight: 1.1,
-      maxHeight: "40px",
-      overflow: "hidden",
-      width: "100%",
-    }}
-  >
-    {productName}
-  </div>
+        <div
+          ref={printRef}
+          className="sticker border"
+          style={{
+            width: "40mm",
+            height: "25mm",
+            paddingTop: "1mm",
+            paddingRight: "2mm",
+            paddingBottom: "1mm",
+            paddingLeft: "0mm",
+          }}
+        >
+          <div className="product-name">{productName}</div>
 
-  {/* Штрихкод */}
-  <div style={{ width: "100%", flexShrink: 0 }}>
-    <Barcode
-      value={barcode}
-      format="EAN13"
-      width={2.7}
-      height={40}
-      displayValue
-      fontSize={8}
-      margin={0}
-    />
-  </div>
+          <Barcode
+            value={barcode}
+            format="EAN13"
+            width={1.35}
+            height={20}
+            displayValue
+            fontSize={8}
+            margin={0}
+          />
 
-  {/* Бренд / BadPhone */}
-  <div
-    style={{
-      fontSize: "18pt",
-      fontWeight: "bold",
-      lineHeight: 1,
-      width: "100%",
-      textAlign: "center",
-    }}
-  >
-    BadPhone
-  </div>
-</div>
-
+          {/* ВМЕСТО ЦЕНЫ */}
+          <div className="brand">BadPhone</div>
+        </div>
 
         {/* КНОПКИ */}
         <div className="flex justify-end mt-3 gap-2">
