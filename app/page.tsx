@@ -174,7 +174,7 @@ export default function MainPage() {
     refreshVisits?: () => Promise<void>;
     refreshSales: () => Promise<void>;
     sales: any[];
-    addSale: (sale: any) => Promise<void>;
+    addSale: (sale: any) => Promise<{ id: string; payment_method?: string }>;
     loadData: (user: any) => Promise<void>; // ✅ Добавляем типизацию
     currentShift: { id: string; start_time: string; end_time: string } | null;
   };
@@ -197,6 +197,31 @@ export default function MainPage() {
   useEffect(() => {
     setVisits(contextVisits || []);
   }, [contextVisits]);
+
+  // When the user navigates to the main page, ensure we refresh visits/sales from the backend
+  // Avoid including unstable function references in deps to prevent infinite re-runs.
+  const lastMainRefreshTime = useRef<number>(0);
+  useEffect(() => {
+    if (currentPage !== "main") return;
+    if (!isOnline) return;
+
+    const now = Date.now();
+    // throttle to avoid rapid repeated refreshes
+    if (now - lastMainRefreshTime.current < 2000) return;
+    lastMainRefreshTime.current = now;
+
+    (async () => {
+      try {
+        // call latest functions from context but do NOT include them in deps (they are unstable)
+        if (typeof refreshVisits === "function") await refreshVisits();
+        if (typeof refreshSales === "function") await refreshSales();
+        if (typeof loadData === "function" && currentUser) await loadData(currentUser);
+      } catch (err) {
+        console.warn("Failed to refresh visits/sales on main page load:", err);
+      }
+    })();
+    // Intentionally omitting context functions from deps to avoid re-running on every render
+  }, [currentPage, isOnline, currentUser?.id]);
 
   useEffect(() => {
     if (!isShiftActive) return;
@@ -360,7 +385,35 @@ export default function MainPage() {
     lastVisitCreationTime.current = now;
 
     try {
-      // ✅ Используем прямое обращение к Supabase вместо API роута
+      // First: try to find an existing open visit for the same store & seller created today
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      try {
+        const { data: openVisit } = await supabase
+          .from("visits")
+          .select("id, created_at")
+          .eq("store_id", currentStore.id)
+          .eq("seller_id", currentUser.id)
+          .is("sale_id", null)
+          .gte("created_at", startOfDay.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (openVisit && openVisit.id) {
+          // Found an existing open visit created today — reuse it
+          if (refreshVisits) {
+            await refreshVisits();
+          }
+          return openVisit.id;
+        }
+      } catch (e) {
+        // ignore and proceed to create new visit
+        console.warn("Failed to query open visit, will create new:", e);
+      }
+
+      // No open visit found — create a new one
       const { count: existingVisitsCount } = await supabase
         .from("visits")
         .select("id", { count: "exact", head: true })
@@ -446,41 +499,39 @@ export default function MainPage() {
 
     try {
       // Создаем продажу через контекст с корректным payment_method
-      await addSale({
+      const salePayload = {
         receipt_number,
         total_amount: saleData.total_amount,
         payment_method: saleData.payment_method || "cash",
         items_data: saleData.items_data,
         seller_id: currentUser.id,
-      });
+      };
+      
+      await addSale(salePayload);
 
-      // Небольшая задержка для обеспечения записи в БД
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Ищем созданную продажу
-      const { data: createdSale, error: findError } = await supabase
+      // Fetch the created sale to get its ID
+      const { data: newSale, error: fetchError } = await supabase
         .from("sales")
         .select("id, payment_method")
         .eq("receipt_number", receipt_number)
-        .eq("seller_id", currentUser.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (findError || !createdSale) {
-        console.error("❌ Failed to find created sale:", findError);
-        throw new Error(
-          "Помилка пошуку створеної продажі: " +
-            (findError?.message ?? "Unknown error")
-        );
+      if (fetchError || !newSale) {
+        throw new Error("Помилка отримання ID продажу: " + (fetchError?.message ?? "Sale not found"));
       }
+
+      const createdSaleId = newSale.id;
+      const createdPaymentMethod = newSale.payment_method ?? saleData.payment_method ?? null;
+
       // Связываем визит с продажей
       const { error: visitError } = await supabase
         .from("visits")
         .update({
-          sale_id: createdSale.id,
+          sale_id: createdSaleId,
           sale_amount: saleData.total_amount,
-          payment_method: createdSale.payment_method || null,
+          payment_method: createdPaymentMethod,
         })
         .eq("id", visitId);
 
@@ -494,7 +545,7 @@ export default function MainPage() {
         await refreshVisits();
       }
 
-      return { id: createdSale.id };
+      return { id: createdSaleId };
     } catch (error) {
       console.error("❌ Error in createSaleAndLinkVisit:", error);
       throw error;

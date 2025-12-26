@@ -38,6 +38,7 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     products,
     stores,
     currentUser,
+    currentShift,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -103,6 +104,11 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
       loadProducts(currentUser).catch((e) => console.warn("loadProducts:", e));
     }
   }, [currentUser, products.length, productsLoading, loadProducts]);
+
+  // If there's an active shift, default the store filter to that store
+  useEffect(() => {
+    if (currentShift?.store_id) setStoreFilter(currentShift.store_id);
+  }, [currentShift]);
 
   const handleAddProduct = () => {
     setEditingProduct(null);

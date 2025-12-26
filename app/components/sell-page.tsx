@@ -315,13 +315,27 @@ export default function SellPage({
     return (
       <SaleReceipt
         sale={lastSaleData}
-        onNewSale={() => {
+        onNewSale={async () => {
+          // Reset local UI state first
           setShowReceipt(false);
           setLastSaleData(null);
           setCart([]);
           setDiscountAmount(0);
           setPaymentMethod("cash");
-          fetchProducts(true); // обновление товаров
+
+          // Refresh product list
+          await fetchProducts(true);
+
+          // Create a NEW visit (so next sale is linked to a fresh visit)
+          // If parent provided onCreateVisit, use it — it will also set the active visit in the parent
+          if (typeof onCreateVisit === "function") {
+            try {
+              await onCreateVisit();
+            } catch (err) {
+              console.error("Failed to create new visit for new sale:", err);
+              // keep going — user can still manually start a sale or we'll fall back
+            }
+          }
         }}
         onBack={() => {
           setShowReceipt(false);

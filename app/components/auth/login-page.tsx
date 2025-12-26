@@ -303,6 +303,16 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // If stores are available and no store is selected yet, set a sensible default once
+  const initialStoreSet = useRef(false);
+  useEffect(() => {
+    if (initialStoreSet.current) return;
+    if (!storesLoading && Array.isArray(appStores) && appStores.length > 0) {
+      setFormData((prev) => ({ ...prev, storeId: prev.storeId || appStores[0].id }));
+      initialStoreSet.current = true;
+    }
+  }, [storesLoading, appStores]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -435,7 +445,7 @@ export default function LoginPage() {
                 type="text"
                 value={formData.login}
                 onChange={(e) =>
-                  setFormData({ ...formData, login: e.target.value })
+                  setFormData((prev) => ({ ...prev, login: e.target.value }))
                 }
                 placeholder="Введіть ваш логін"
                 disabled={isLoading || !isOnline}
@@ -452,7 +462,7 @@ export default function LoginPage() {
                 type="password"
                 value={formData.password}
                 onChange={(e) =>
-                  setFormData({ ...formData, password: e.target.value })
+                  setFormData((prev) => ({ ...prev, password: e.target.value }))
                 }
                 placeholder="Введіть ваш пароль"
                 disabled={isLoading || !isOnline}
@@ -474,7 +484,7 @@ export default function LoginPage() {
                 <Select
                   value={formData.storeId}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, storeId: value })
+                    setFormData((prev) => ({ ...prev, storeId: value }))
                   }
                   disabled={isLoading || !isOnline}
                 >

@@ -154,7 +154,7 @@ interface Props {
 }
 
 export default function ProductForm({ product, onSubmit, onCancel }: Props) {
-  const { stores, currentUser, products, categories: persistedCategories, createCategory } = useApp();
+  const { stores, currentUser, currentShift, products, categories: persistedCategories, createCategory } = useApp();
 
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [generatedBarcode, setGeneratedBarcode] = useState<string | null>(null);
@@ -179,7 +179,7 @@ export default function ProductForm({ product, onSubmit, onCancel }: Props) {
       brand: "",
       model: "",
       barcode: "",
-      store_id: currentUser?.store_id ?? "",
+      store_id: currentShift?.store_id ?? currentUser?.store_id ?? "",
     },
     mode: "onSubmit",
   });
@@ -201,7 +201,7 @@ export default function ProductForm({ product, onSubmit, onCancel }: Props) {
       brand: product.brand ?? "",
       model: product.model ?? "",
       barcode: product.barcode ?? "",
-      store_id: product.store_id ?? currentUser?.store_id ?? "",
+      store_id: product.store_id ?? currentShift?.store_id ?? currentUser?.store_id ?? "",
     });
 
     const barcode = product.barcode || (product.id ? generateBarcodeFromId(product.id) : null);

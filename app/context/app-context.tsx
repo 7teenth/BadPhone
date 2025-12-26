@@ -105,7 +105,7 @@ interface AppState {
 interface AppContextType extends AppState {
   addSale: (
     sale: Omit<Sale, "id" | "store_id" | "created_at">
-  ) => Promise<void>;
+  ) => Promise<{ id: string; payment_method?: string }>; 
   addProduct: (
     product: Omit<Product, "id" | "created_at" | "updated_at"> & {
       store_id?: string | null;
@@ -1273,7 +1273,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ✅ ИСПРАВЛЕННАЯ функция addSale БЕЗ создания визитов
   const addSale = async (
     sale: Omit<Sale, "id" | "store_id" | "created_at">
-  ) => {
+  ): Promise<{ id: string; payment_method?: string }> => {
     if (!isOnline || !currentUser) {
       console.error("❌ Offline or no user, cannot add sale");
       throw new Error(
@@ -1317,8 +1317,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return updatedSales;
         });
 
-        // Обрабатываем каждый товар в продаже
-        for (const item of sale.items_data) {
+        // Обновляем товары параллельно для ускорения
+        const productUpdates = sale.items_data.map(async (item) => {
           const productId = item.product_id;
           const soldQty = item.quantity;
 
@@ -1327,47 +1327,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               "⚠️ Missing product_id or quantity in sale item:",
               item
             );
-            continue;
+            return;
           }
 
-          // Находим товар в локальном состоянии
           const existingProduct = products.find((p) => p.id === productId);
           if (!existingProduct) {
             console.warn(`⚠️ Product ${productId} not found in local state`);
-            continue;
+            return;
           }
 
           const currentQty = existingProduct.quantity;
           const newQty = Math.max(0, currentQty - soldQty);
-          const { data: updatedProduct, error: updateError } = await supabase
-            .from("products")
-            .update({ quantity: newQty })
-            .eq("id", productId)
-            .select()
-            .single();
 
-          if (updateError) {
-            console.error(
-              `❌ Failed to update product ${productId} in Supabase:`,
-              updateError
-            );
-            continue;
-          }
+          try {
+            const { data: updatedProduct, error: updateError } = await supabase
+              .from("products")
+              .update({ quantity: newQty })
+              .eq("id", productId)
+              .select()
+              .single();
 
-          if (updatedProduct) {
-            // Обновляем локальное состояние
-            setProducts((prev) => {
-              const updated = prev.map((p) =>
-                p.id === productId ? updatedProduct : p
+            if (updateError) {
+              console.error(
+                `❌ Failed to update product ${productId} in Supabase:`,
+                updateError
               );
-              return updated;
-            });
-          } else {
-            console.warn(
-              `⚠️ No data returned from Supabase for product ${productId}`
-            );
+              return;
+            }
+
+            if (updatedProduct) {
+              setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct : p)));
+            }
+          } catch (err) {
+            console.error(`❌ Failed to update product ${productId}:`, err);
           }
-        }
+        });
+
+        await Promise.all(productUpdates);
       }
 
       // ✅ Автоматически обновляем данные о продажах после создания новой продажи
@@ -1377,12 +1373,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.warn("⚠️ Failed to auto-refresh sales data:", refreshError);
         // Не бросаем ошибку, так как продажа уже создана успешно
       }
-    } catch (error) {
-      console.error("❌ addSale failed:", error);
-      throw error;
-    }
-  };
 
+      return { id: saleData.id, payment_method: saleData.payment_method };
+    } catch (error) {
+        console.error("❌ addSale failed:", error);
+        throw error;
+      }
+    };
   const getDailySalesStats = () => {
     if (!sales || sales.length === 0) {
       return [];
