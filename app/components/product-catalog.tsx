@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   Plus,
@@ -20,13 +19,15 @@ import {
   Package,
   Edit,
   Trash2,
+  Printer,
   AlertCircle,
   Filter,
 } from "lucide-react";
+import BarcodeSticker from "./barcode-sticker";
 import { useApp } from "../context/app-context";
 import { formatCurrency } from "@/lib/utils";
 import ProductForm from "./product-form";
-import { DeleteConfirmDialog } from "./delete-confirm-dialog";
+import { DeleteConfirmDialog } from "./delete-confirm-dialog"; 
 
 interface ProductCatalogProps {
   onBack: () => void;
@@ -54,7 +55,19 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [deleteProduct_id, setDeleteProduct_id] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("list");
+
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [productForPrint, setProductForPrint] = useState<any | null>(null);
+
+  const handleOpenPrint = (product: any) => {
+    setProductForPrint(product);
+    setShowPrintModal(true);
+  };
+
+  const handleClosePrint = () => {
+    setShowPrintModal(false);
+    setProductForPrint(null);
+  }; 
 
   // Фильтрация продуктов
   const filteredProducts = products.filter((product) => {
@@ -149,7 +162,29 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
 
     return { total, inStock, lowStock, outOfStock, totalValue };
   };
-  const productToDelete = products.find((p) => p.id === deleteProduct_id);
+
+  // helper to generate barcode from id if product has none
+  function generateBarcodeFromId(id: string) {
+    const cleanId = id.replace(/-/g, "").toUpperCase();
+    let numericCode = "";
+
+    for (let i = 0; i < Math.min(cleanId.length, 12); i++) {
+      const char = cleanId[i];
+      numericCode += /\d/.test(char)
+        ? char
+        : ((char.charCodeAt(0) - 55) % 10).toString();
+    }
+
+    numericCode = numericCode.padEnd(12, "0").slice(0, 12);
+
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += Number(numericCode[i]) * (i % 2 === 0 ? 1 : 3);
+    const checkDigit = (10 - (sum % 10)) % 10;
+
+    return numericCode + checkDigit;
+  }
+
+  const productToDelete = products.find((p) => p.id === deleteProduct_id); 
 
   const stats = getStockStats();
   const showLoadMore =
@@ -321,196 +356,95 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
           </Card>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="list" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Список товарів
-            </TabsTrigger>
-            <TabsTrigger value="grid" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Сітка товарів
-            </TabsTrigger>
-          </TabsList>
+        {filteredProducts.length === 0 ? (
+          <Card className="p-12 text-center">
+            <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-xl font-medium text-gray-600 mb-2">
+              Товари не знайдено
+            </h3>
+            <p className="text-gray-500">
+              Спробуйте змінити критерії пошуку або додайте новий товар
+            </p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredProducts.map((product) => {
+              const stockStatus = getStockStatus(product.quantity);
+              const store = stores.find((s) => s.id === product.store_id);
 
-          <TabsContent value="list" className="space-y-4">
-            {filteredProducts.length === 0 ? (
-              <Card className="p-12 text-center">
-                <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-600 mb-2">
-                  Товари не знайдено
-                </h3>
-                <p className="text-gray-500">
-                  Спробуйте змінити критерії пошуку або додайте новий товар
-                </p>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {filteredProducts.map((product) => {
-                  const stockStatus = getStockStatus(product.quantity);
-                  const store = stores.find((s) => s.id === product.store_id);
-
-                  return (
-                    <Card
-                      key={product.id}
-                      className="hover:shadow-md transition-shadow"
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold">
-                                {product.name}
-                              </h3>
-                              <Badge variant="outline" className="text-xs">
-                                {product.category}
-                              </Badge>
-                              <div
-                                className={`w-3 h-3 rounded-full ${stockStatus.color}`}
-                                title={stockStatus.label}
-                              />
-                            </div>
-                            <div className="text-sm text-gray-600 mb-2">
-                              <span className="font-medium">
-                                {product.brand}
-                              </span>{" "}
-                              {product.model}
-                            </div>
-                            {product.description && (
-                              <p className="text-sm text-gray-600 mb-2">
-                                {product.description}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-4 text-sm">
-                              <span className="text-2xl font-bold text-green-600">
-                                {formatCurrency(product.price)}
-                              </span>
-                              <span className="text-gray-600">
-                                Кількість: {product.quantity} шт
-                              </span>
-                              {product.barcode && (
-                                <span className="text-gray-600">
-                                  Штрих-код: {product.barcode}
-                                </span>
-                              )}
-                              {store && (
-                                <span className="text-gray-600">
-                                  Магазин: {store.name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 ml-4">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditProduct(product)}
-                              disabled={!isOnline}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeleteProduct(product.id)}
-                              disabled={!isOnline}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+              return (
+                <Card
+                  key={product.id}
+                  className="hover:shadow-md transition-shadow"
+                >
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <Badge variant="outline" className="text-xs">
+                          {product.category}
+                        </Badge>
+                        <div
+                          className={`w-3 h-3 rounded-full ${stockStatus.color}`}
+                          title={stockStatus.label}
+                        />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm line-clamp-2 mb-1">
+                          {product.name}
+                        </h3>
+                        <p className="text-xs text-gray-600">
+                          {product.brand} {product.model}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-lg font-bold text-green-600">
+                          {formatCurrency(product.price)}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="grid" className="space-y-4">
-            {filteredProducts.length === 0 ? (
-              <Card className="p-12 text-center">
-                <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-600 mb-2">
-                  Товари не знайдено
-                </h3>
-                <p className="text-gray-500">
-                  Спробуйте змінити критерії пошуку або додайте новий товар
-                </p>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProducts.map((product) => {
-                  const stockStatus = getStockStatus(product.quantity);
-                  const store = stores.find((s) => s.id === product.store_id);
-
-                  return (
-                    <Card
-                      key={product.id}
-                      className="hover:shadow-md transition-shadow"
-                    >
-                      <CardContent className="p-4">
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-start">
-                            <Badge variant="outline" className="text-xs">
-                              {product.category}
-                            </Badge>
-                            <div
-                              className={`w-3 h-3 rounded-full ${stockStatus.color}`}
-                              title={stockStatus.label}
-                            />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-sm line-clamp-2 mb-1">
-                              {product.name}
-                            </h3>
-                            <p className="text-xs text-gray-600">
-                              {product.brand} {product.model}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-lg font-bold text-green-600">
-                              {formatCurrency(product.price)}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              Кількість: {product.quantity} шт
-                            </div>
-                            {store && (
-                              <div className="text-xs text-gray-600">
-                                Магазин: {store.name}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditProduct(product)}
-                              disabled={!isOnline}
-                              className="flex-1"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeleteProduct(product.id)}
-                              disabled={!isOnline}
-                              className="flex-1"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
+                        <div className="text-xs text-gray-600">
+                          Кількість: {product.quantity} шт
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                        {store && (
+                          <div className="text-xs text-gray-600">
+                            Магазин: {store.name}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenPrint(product)}
+                          disabled={!isOnline}
+                          className="flex-1"
+                        >
+                          <Printer className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditProduct(product)}
+                          disabled={!isOnline}
+                          className="flex-1"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDeleteProduct(product.id)}
+                          disabled={!isOnline}
+                          className="flex-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )} 
 
         {showLoadMore && (
           <div className="flex justify-center mt-4">
@@ -532,6 +466,21 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
                 ? "Завантаження..."
                 : "Завантажити ще"}
             </Button>
+          </div>
+        )}
+
+        {/* Print Modal */}
+        {showPrintModal && productForPrint && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-xs w-full max-h-[90vh] overflow-auto">
+              <BarcodeSticker
+                barcode={productForPrint.barcode ?? (productForPrint.id ? generateBarcodeFromId(productForPrint.id) : "")}
+                productName={productForPrint.name}
+                brand={productForPrint.brand}
+                model={productForPrint.model}
+                onClose={() => handleClosePrint()}
+              />
+            </div>
           </div>
         )}
       </div>

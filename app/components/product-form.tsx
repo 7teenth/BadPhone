@@ -272,6 +272,8 @@ export default function ProductForm({ product, onSubmit, onCancel }: Props) {
   const currentBarcode = watch("barcode");
   const currentName = watch("name");
   const currentPrice = watch("price");
+  const currentBrand = watch("brand");
+  const currentModel = watch("model");
 
   return (
     <>
@@ -313,7 +315,13 @@ export default function ProductForm({ product, onSubmit, onCancel }: Props) {
       </Card>
 
       {showBarcodeModal && currentBarcode && (
-        <BarcodeSticker barcode={currentBarcode} productName={currentName || "Товар"} onClose={() => setShowBarcodeModal(false)} />
+        <BarcodeSticker
+          barcode={currentBarcode}
+          productName={currentName || "Товар"}
+          brand={currentBrand}
+          model={currentModel}
+          onClose={() => setShowBarcodeModal(false)}
+        />
       )}
     </>
   );

@@ -8,10 +8,12 @@ import Barcode from "react-barcode";
 interface Props {
   barcode: string;
   productName: string;
+  brand?: string;
+  model?: string;
   onClose: () => void;
 }
 
-export default function BarcodeSticker({ barcode, productName, onClose }: Props) {
+export default function BarcodeSticker({ barcode, productName, brand, model, onClose }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
@@ -27,6 +29,12 @@ export default function BarcodeSticker({ barcode, productName, onClose }: Props)
 
     const doc = iframe.contentWindow?.document;
     if (!doc) return;
+
+    // clone the sticker element and replace the product name with brand + model for printing
+    const clone = printRef.current.cloneNode(true) as HTMLElement;
+    const nameEl = clone.querySelector('.product-name');
+    const printName = (brand || model) ? `${brand ?? ""}${brand && model ? " " : ""}${model ?? ""}` : productName;
+    if (nameEl) nameEl.textContent = printName;
 
     doc.open();
     doc.write(`
@@ -81,7 +89,7 @@ export default function BarcodeSticker({ barcode, productName, onClose }: Props)
           </style>
         </head>
         <body>
-          ${printRef.current.outerHTML}
+          ${clone.outerHTML}
         </body>
       </html>
     `);
@@ -119,7 +127,7 @@ export default function BarcodeSticker({ barcode, productName, onClose }: Props)
             alignItems: "center",
           }}
         >
-          <div className="product-name">{productName}</div>
+          <div className="product-name">{(brand || model) ? `${brand ?? ""}${brand && model ? " " : ""}${model ?? ""}` : productName}</div>
 
           <Barcode
             value={barcode}
