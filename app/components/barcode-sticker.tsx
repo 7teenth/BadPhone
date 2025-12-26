@@ -22,10 +22,27 @@ export default function BarcodeSticker({
   const handlePrint = () => {
     if (!printRef.current) return;
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    // Create a hidden iframe to avoid opening a new tab/window
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.visibility = "hidden";
+    iframe.setAttribute("aria-hidden", "true");
 
-    printWindow.document.write(`
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    doc.open();
+    doc.write(`
       <!DOCTYPE html>
       <html>
         <head>
@@ -93,11 +110,33 @@ export default function BarcodeSticker({
         </body>
       </html>
     `);
+    doc.close();
 
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+    const printAndCleanup = () => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("Printing failed:", e);
+      } finally {
+        setTimeout(() => {
+          try {
+            if (document.body.contains(iframe)) document.body.removeChild(iframe);
+          } catch {}
+        }, 500);
+      }
+    };
+
+    // If the iframe document is already ready, print immediately, otherwise wait for onload
+    const win = iframe.contentWindow;
+    if (win && win.document && win.document.readyState === "complete") {
+      printAndCleanup();
+    } else {
+      iframe.onload = printAndCleanup;
+      // Fallback: ensure printing after a short delay
+      setTimeout(printAndCleanup, 1000);
+    }
   };
 
   return (
