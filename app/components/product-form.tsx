@@ -67,14 +67,22 @@ const FormField = <T extends "input" | "textarea" = "input">({
   as,
   ...props
 }: FormFieldProps<T>) => {
-  const Tag = as === "textarea" ? "textarea" : "input";
+  const commonClass = "w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring";
+
   return (
     <div>
       <label className="block text-sm font-medium mb-1">{label}</label>
-      <Tag
-        {...props}
-        className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-      />
+      {as === "textarea" ? (
+        <textarea
+          {...(props as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+          className={commonClass}
+        />
+      ) : (
+        <input
+          {...(props as React.InputHTMLAttributes<HTMLInputElement>)}
+          className={commonClass}
+        />
+      )}
       {error && <p className="text-xs text-red-600">{error.message}</p>}
     </div>
   );
@@ -305,7 +313,7 @@ export default function ProductForm({ product, onSubmit, onCancel }: Props) {
       </Card>
 
       {showBarcodeModal && currentBarcode && (
-        <BarcodeSticker barcode={currentBarcode} productName={currentName || "Товар"} price={currentPrice || 0} onClose={() => setShowBarcodeModal(false)} />
+        <BarcodeSticker barcode={currentBarcode} productName={currentName || "Товар"} onClose={() => setShowBarcodeModal(false)} />
       )}
     </>
   );

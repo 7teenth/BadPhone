@@ -26,3 +26,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 dist/win-unpacked/resources/app.asar
+
+# dist folder in project root
+/dist
