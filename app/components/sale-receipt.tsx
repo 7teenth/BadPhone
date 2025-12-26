@@ -69,7 +69,7 @@ export default function SaleReceipt({
   // generate QR images locally using the 'qrcode' package
   // NOTE: import at top dynamically so it's only loaded client-side when needed
   const handlePrint = async () => {
-    const printWindow = window.open("", "_blank", "width=350,height=800");
+    const printWindow = window.open("", "_blank", "width=240,height=800");
     if (!printWindow) return;
 
     const getUnitPrice = (item: SaleItem) => item.price ?? item.unit_price ?? 0;
@@ -86,7 +86,7 @@ export default function SaleReceipt({
     const itemsHtml = (sale.items || [])
       .map(
         (item) => `
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:14px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
         <span>${item.name ?? item.product_name ?? "Товар"}$
           ${item.brand ? ` (${item.brand})` : ""} × ${getItemQuantity(
           item
@@ -102,25 +102,27 @@ export default function SaleReceipt({
           <meta charset="utf-8" />
           <title>Чек ${sale.id}</title>
           <style>
-            body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding:20px; color:#111827; }
-            .receipt { max-width:400px; margin:0 auto; padding:12px; border:1px solid #e5e7eb; }
-            .title { text-align:center; font-size:18px; font-weight:700; margin-bottom:6px; }
-            .line { border-top:1px dashed #9ca3af; margin:10px 0; }
-            .totals { display:flex; justify-content:space-between; font-weight:700; font-size:15px; margin-top:6px; }
-            .payment { text-align:center; margin-top:8px; font-size:14px; }
+            @page { size: 57mm auto; margin: 2mm; }
+            body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding:0; color:#111827; -webkit-print-color-adjust: exact; }
+            .receipt { width:57mm; max-width:57mm; box-sizing:border-box; margin:0 auto; padding:6px; border:1px solid #e5e7eb; font-size:12px; }
+            .title { text-align:center; font-size:14px; font-weight:700; margin-bottom:6px; }
+            .line { border-top:1px dashed #9ca3af; margin:8px 0; }
+            .totals { display:flex; justify-content:space-between; font-weight:700; font-size:13px; margin-top:6px; }
+            .payment { text-align:center; margin-top:8px; font-size:12px; }
+            img { max-width:100%; height:auto; display:block; margin:0 auto; }
           </style>
         </head>
         <body>
           <div class="receipt">
             <div style="text-align:center; margin-bottom:6px;">
-              <img src="${logoUrl}" alt="logo" style="max-height:64px; max-width:220px; display:block; margin:0 auto 8px;" />
-              <div style="font-weight:800; font-size:18px; letter-spacing:0.4px;">${escapeHtml(
+              <img src="${logoUrl}" alt="logo" style="max-height:48px; max-width:100%; display:block; margin:0 auto 8px;" />
+              <div style="font-weight:800; font-size:14px; letter-spacing:0.2px;">${escapeHtml(
                 storeName
               )}</div>
-              <div style="font-size:12px; color:#374151;">${escapeHtml(
+              <div style="font-size:11px; color:#374151;">${escapeHtml(
                 storeAddress
               )}</div>
-              <div style="font-size:12px; color:#374151;">${escapeHtml(
+              <div style="font-size:11px; color:#374151;">${escapeHtml(
                 storePhone
               )}</div>
             </div>
