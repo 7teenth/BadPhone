@@ -79,7 +79,6 @@ export default function SellPage({
   const isFetching = useRef(false);
 
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const lastAutoAddRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   // Фильтр по категориям/брендам
@@ -141,31 +140,17 @@ export default function SellPage({
         setPage(1);
         setHasMore((data?.length || 0) === PAGE_SIZE);
 
-        // Auto-add to cart when a single explicit search result is returned
+        // If the search yields exactly one explicit result, DO NOT auto-add to cart.
+        // Instead, notify the user and keep the result visible and focused so they can review or add manually.
         const trimmedSearch = searchTerm.trim();
-        if (
-          trimmedSearch &&
-          (data?.length || 0) === 1 &&
-          lastAutoAddRef.current !== trimmedSearch
-        ) {
+        if (trimmedSearch && (data?.length || 0) === 1) {
           const single = data![0] as Product;
-          if (single.quantity > 0) {
-            try {
-              addToCart(single);
-              toast({
-                title: "Додано в кошик",
-                description: `${single.name} — ${single.brand} ${single.model}`,
-              });
-              setSearchTerm("");
-              // refresh products to reflect quantity changes
-              await fetchProducts(true);
-              setTimeout(() => searchRef.current?.focus(), 20);
-            } catch (err) {
-              console.error("Auto-add failed", err);
-            }
-          }
-
-          lastAutoAddRef.current = trimmedSearch;
+          toast({
+            title: "Товар знайдено",
+            description: `${single.name} — ${single.brand} ${single.model}`,
+          });
+          // keep search term so user can see result; do not auto-add to cart
+          setTimeout(() => searchRef.current?.focus(), 20);
         }
       } else {
         setProducts((prev) => [...prev, ...(data || [])]);
@@ -187,8 +172,6 @@ export default function SellPage({
     setPage(0);
     setHasMore(true);
     setProducts([]);
-    // reset the last auto-add guard so new queries can auto-add again
-    lastAutoAddRef.current = null;
 
     const timer = setTimeout(() => {
       fetchProducts(true);
@@ -200,7 +183,18 @@ export default function SellPage({
   // ----------------------
   // Кнопки и функции работы с корзиной
   // ----------------------
-  const addToCart = useCallback((product: Product) => {
+  const addToCart = useCallback(async (product: Product) => {
+    // Lazily create a visit only when the user first adds an item to the cart
+    if (!visitId && typeof onCreateVisit === "function") {
+      try {
+        await onCreateVisit();
+      } catch (err) {
+        console.error("Failed to create visit before adding to cart:", err);
+        toast({ title: "Помилка", description: "Не вдалося створити візит" });
+        return;
+      }
+    }
+
     if (product.quantity <= 0) {
       alert("Товар закінчився на складі");
       return;
@@ -237,7 +231,7 @@ export default function SellPage({
         ];
       }
     });
-  }, []);
+  }, [visitId, onCreateVisit, toast]);
 
   const updateCartItemQuantity = (productId: string, newQuantity: number) => {
     const product = products.find((p) => p.id === productId);
@@ -406,7 +400,7 @@ export default function SellPage({
           </Button>
           <h1 className="text-xl font-bold">Продаж</h1>
           <Badge variant="secondary" className="bg-gray-700 text-white text-xs">
-            Візит ID: {visitId}
+            Візит ID: {visitId || "—"}
           </Badge>
         </div>
         <div className="flex items-center gap-3">

@@ -6,6 +6,7 @@ import { validate as isUuid } from "uuid";
 import type { SaleItem } from "@/lib/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { Analytics } from "@vercel/analytics/react";
+import { DollarSign, ShoppingCart } from "lucide-react";
 import {
   Play,
   Clock,
@@ -554,23 +555,14 @@ export default function MainPage() {
     }
   }
 
-  const handleSell = async () => {
+  const handleSell = () => {
     if (!isShiftActive) {
       startShift();
     }
 
-    if (isCreatingVisit) {
-      return;
-    }
-
-    try {
-      const newVisitId = await createVisit();
-      setActiveVisitId(newVisitId);
-      setCurrentPage("sell");
-    } catch (error) {
-      console.error("❌ Error starting sale:", error);
-      alert("Не вдалося створити візит: " + (error as Error).message);
-    }
+    // Open Sell page without pre-creating a visit; the visit will be created lazily
+    // when the user adds the first item to the cart (handled by SellPage)
+    setCurrentPage("sell");
   };
 
   const handleFindProduct = () => setCurrentPage("find");
@@ -745,7 +737,8 @@ export default function MainPage() {
         currentTime={currentTime}
         startShift={startShift}
         openShiftStatsModal={openShiftStatsModal}
-        handleLogout={handleLogout}
+        onOpenAdmin={handleAdminPanel}
+        onOpenUsers={handleUsersManagement}
       />
 
       <main className="p-6 space-y-6">
@@ -772,7 +765,10 @@ export default function MainPage() {
             className="h-24 text-lg font-medium rounded-xl relative flex flex-col items-center justify-center gap-2"
             disabled={!isOnline || !isShiftActive || isCreatingVisit}
           >
-            <div className="text-2xl">💰</div>
+            <div className="text-2xl text-amber-400">
+  <DollarSign className="h-8 w-8" />
+</div>
+
             <span>{isCreatingVisit ? "Створення..." : "Продати"}</span>
             {isShiftActive && !isCreatingVisit && (
               <Badge className="absolute top-2 right-2 bg-green-500">
@@ -822,25 +818,6 @@ export default function MainPage() {
                   </Badge>
                 )}
               </Button>
-
-              <Button
-                onClick={handleAdminPanel}
-                variant="purple"
-                className="h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
-                disabled={!isOnline}
-              >
-                <BarChart3 className="h-6 w-6" />
-                <span>Адмін панель</span>
-              </Button>
-
-              <Button
-                onClick={handleUsersManagement}
-                className="h-24 text-lg font-medium rounded-xl flex flex-col items-center justify-center gap-2"
-                disabled={!isOnline}
-              >
-                <Users className="h-6 w-6" />
-                <span>Користувачі</span>
-              </Button>
             </>
           )}
         </div>
@@ -858,18 +835,18 @@ export default function MainPage() {
               </p>
             </Card>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-visible">
               <div
-                className="flex gap-4 pb-4"
+                className="flex gap-4 pb-4 overflow-visible"
                 style={{ minWidth: "max-content" }}
               >
                 {visits.map((visit, index) => (
                   <Card
                     key={visit.id}
                     onClick={() => onSelectVisit(visit)}
-                    className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 bg-gradient-to-br from-gray-900 to-black text-white border-gray-700 flex-shrink-0 w-64 ${
+                    className={`cursor-pointer transform-gpu will-change-transform transition-transform duration-200 ease-out hover:shadow-lg hover:scale-105 hover:z-10 relative bg-gradient-to-br from-gray-900 to-black text-white border-gray-700 flex-shrink-0 w-64 ${
                       selectedVisit?.id === visit.id
-                        ? "ring-2 ring-blue-500 shadow-xl"
+                        ? "ring-2 ring-blue-500 shadow-xl z-20"
                         : ""
                     }`}
                   >
