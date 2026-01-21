@@ -1234,6 +1234,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .from("products")
         .update(cleanProduct)
         .eq("id", id)
+        .eq("store_id", currentStore?.id || "")
         .select()
         .maybeSingle();
 
@@ -1257,7 +1258,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!isOnline) return;
 
     try {
-      const { error } = await supabase.from("products").delete().eq("id", id);
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", id)
+        .eq("store_id", currentStore?.id || "");
 
       if (error) {
         console.error("Error deleting product:", error);
@@ -1283,6 +1288,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const store_id = currentStore?.id || null;
+      console.log("🛍️ addSale started - store_id:", store_id, "currentUser:", currentUser?.id);
 
       // Добавляем продажу
       const { data: saleData, error: saleError } = await supabase
@@ -1322,6 +1328,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const productId = item.product_id;
           const soldQty = item.quantity;
 
+          console.log(`📦 Updating product ${productId}: qty ${soldQty}, store_id: ${store_id}`);
+
           if (!productId || !soldQty) {
             console.warn(
               "⚠️ Missing product_id or quantity in sale item:",
@@ -1330,34 +1338,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          const existingProduct = products.find((p) => p.id === productId);
-          if (!existingProduct) {
-            console.warn(`⚠️ Product ${productId} not found in local state`);
+          // Get current quantity from DB instead of local state
+          const { data: currentProduct, error: fetchError } = await supabase
+            .from("products")
+            .select("quantity")
+            .eq("id", productId)
+            .eq("store_id", store_id)
+            .maybeSingle();
+
+          if (fetchError) {
+            console.warn(`⚠️ Could not fetch current product ${productId}:`, fetchError);
             return;
           }
 
-          const currentQty = existingProduct.quantity;
+          if (!currentProduct) {
+            console.warn(`⚠️ Product ${productId} not found in DB for store ${store_id}`);
+            return;
+          }
+
+          const currentQty = currentProduct.quantity || 0;
           const newQty = Math.max(0, currentQty - soldQty);
+
+          console.log(`  Current qty: ${currentQty}, New qty: ${newQty}`);
 
           try {
             const { data: updatedProduct, error: updateError } = await supabase
               .from("products")
               .update({ quantity: newQty })
               .eq("id", productId)
+              .eq("store_id", store_id)
               .select()
               .single();
 
             if (updateError) {
               console.error(
-                `❌ Failed to update product ${productId} in Supabase:`,
+                `❌ Failed to update product ${productId} with store_id filter:`,
                 updateError
               );
+              // Try without store_id filter if it failed (for legacy data)
+              console.warn(`⚠️ Retrying without store_id filter for product ${productId}`);
+              const { data: updatedProduct2, error: updateError2 } = await supabase
+                .from("products")
+                .update({ quantity: newQty })
+                .eq("id", productId)
+                .select()
+                .single();
+
+              if (updateError2) {
+                console.error(
+                  `❌ Failed to update product ${productId} even without store_id:`,
+                  updateError2
+                );
+                return;
+              }
+
+              console.log(`✅ Product ${productId} updated (without store_id filter): ${currentQty} → ${newQty}`);
+              if (updatedProduct2) {
+                setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct2 : p)));
+              }
               return;
             }
 
-            if (updatedProduct) {
-              setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct : p)));
-            }
+            console.log(`✅ Product ${productId} updated (with store_id): ${currentQty} → ${newQty}`);
           } catch (err) {
             console.error(`❌ Failed to update product ${productId}:`, err);
           }

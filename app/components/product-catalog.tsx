@@ -39,6 +39,7 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     stores,
     currentUser,
     currentShift,
+    currentStore,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -50,6 +51,7 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
   } = useApp();
   const [localLoading, setLocalLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [storeFilter, setStoreFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
@@ -70,8 +72,11 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
     setProductForPrint(null);
   }; 
 
+  // Use search results if searching, otherwise use context products
+  const productsToDisplay = searchTerm.trim() ? searchResults : products;
+
   // Фильтрация продуктов
-  const filteredProducts = products.filter((product) => {
+  const filteredProducts = productsToDisplay.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -95,20 +100,76 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
 
   // Получение уникальных категорий
   const categories = Array.from(
-    new Set(products.map((p) => p.category))
+    new Set(productsToDisplay.map((p) => p.category))
   ).filter(Boolean);
 
   useEffect(() => {
     // ensure first page is loaded (50 items by default)
-    if (products.length === 0 && currentUser && !productsLoading) {
+    if (products.length === 0 && currentUser && !productsLoading && !searchTerm.trim()) {
       loadProducts(currentUser).catch((e) => console.warn("loadProducts:", e));
     }
-  }, [currentUser, products.length, productsLoading, loadProducts]);
+    // When search is cleared, reload first page
+    if (!searchTerm.trim() && currentUser && !productsLoading && products.length > 0) {
+      loadProducts(currentUser).catch((e) => console.warn("loadProducts:", e));
+    }
+  }, [currentUser, productsLoading, loadProducts, searchTerm]);
 
   // If there's an active shift, default the store filter to that store
   useEffect(() => {
     if (currentShift?.store_id) setStoreFilter(currentShift.store_id);
   }, [currentShift]);
+
+  // ✅ When search term is entered, fetch matching products from DB server-side
+  const [isSearching, setIsSearching] = useState(false);
+  useEffect(() => {
+    if (!searchTerm.trim() || !currentUser || !isOnline) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    const searchTimer = setTimeout(async () => {
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        const storeId = currentStore?.id || currentUser.store_id;
+
+        let query = supabase
+          .from("products")
+          .select("*", { count: "exact" });
+
+        // Filter by store for non-owners
+        if (currentUser.role !== "owner" && storeId) {
+          query = query.eq("store_id", storeId);
+        }
+
+        // Server-side search filter
+        const trimmedSearch = searchTerm.trim();
+        query = query.or(
+          `name.ilike.%${trimmedSearch}%,brand.ilike.%${trimmedSearch}%,model.ilike.%${trimmedSearch}%,barcode.ilike.%${trimmedSearch}%`
+        );
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error("Search error:", error);
+          setSearchResults([]);
+          return;
+        }
+
+        // Store search results
+        if (data) {
+          setSearchResults(data);
+        }
+      } catch (err) {
+        console.warn("Failed to search products:", err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300); // debounce search
+
+    return () => clearTimeout(searchTimer);
+  }, [searchTerm, currentUser, currentStore, isOnline]);
 
   const handleAddProduct = () => {
     setEditingProduct(null);
@@ -303,11 +364,15 @@ export function ProductCatalog({ onBack }: ProductCatalogProps) {
 
               <Button
                 variant="outline"
-                onClick={() => {
+                onClick={async () => {
                   setSearchTerm("");
                   setCategoryFilter("all");
                   setStoreFilter("all");
                   setStockFilter("all");
+                  // Reload first page of products
+                  if (currentUser) {
+                    await loadProducts(currentUser);
+                  }
                 }}
                 className="bg-transparent"
               >

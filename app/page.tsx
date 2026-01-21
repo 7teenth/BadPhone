@@ -31,6 +31,7 @@ import LoginPage from "./components/auth/login-page";
 import { useApp } from "./context/app-context";
 import { SalesHistory } from "./components/sales-history";
 import { UsersManagement } from "./components/users-management";
+import { StoresStatus } from "./components/stores-status";
 import { supabase } from "@/lib/supabase";
 import type { Visit } from "@/lib/supabase";
 import { ShiftStatsModal } from "./components/shift-stats-modal";
@@ -103,7 +104,8 @@ type Page =
   | "find"
   | "admin"
   | "sales-history"
-  | "users";
+  | "users"
+  | "stores";
 type UserRole = "seller" | "owner";
 
 // Using Visit interface imported from lib/supabase
@@ -568,6 +570,7 @@ export default function MainPage() {
   const handleFindProduct = () => setCurrentPage("find");
   const handleSalesHistory = () => setCurrentPage("sales-history");
   const handleUsersManagement = () => setCurrentPage("users");
+  const handleStores = () => setCurrentPage("stores");
   const handleAddProduct = () => setCurrentPage("catalog");
   const handleAdminPanel = () => setCurrentPage("admin");
 
@@ -699,6 +702,8 @@ export default function MainPage() {
       return <SalesHistory onBack={handleBackToMain} />;
     case "users":
       return <UsersManagement onBack={handleBackToMain} />;
+    case "stores":
+      return <StoresStatus onBack={handleBackToMain} />;
     case "catalog":
       return <ProductCatalog onBack={handleBackToMain} />;
     case "sell":
@@ -739,6 +744,7 @@ export default function MainPage() {
         openShiftStatsModal={openShiftStatsModal}
         onOpenAdmin={handleAdminPanel}
         onOpenUsers={handleUsersManagement}
+        onOpenStores={handleStores}
       />
 
       <main className="p-6 space-y-6">

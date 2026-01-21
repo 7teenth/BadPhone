@@ -47,6 +47,7 @@ interface HeaderProps {
   openShiftStatsModal: () => void;
   onOpenAdmin?: () => void;
   onOpenUsers?: () => void;
+  onOpenStores?: () => void;
 }
 
 /* ================= HEADER ================= */
@@ -63,6 +64,7 @@ const Header: React.FC<HeaderProps> = ({
   openShiftStatsModal,
   onOpenAdmin,
   onOpenUsers,
+  onOpenStores,
 }) => {
   return (
     <header className="relative h-20 px-6 flex items-center justify-between border-b border-zinc-800 text-zinc-100">
@@ -103,6 +105,15 @@ const Header: React.FC<HeaderProps> = ({
       description="Переглянути поточну зміну"
       onClick={openShiftStatsModal}
     />
+
+    {currentUser?.role === "owner" && (
+      <MenuItem
+        icon={Store}
+        title="Магазини"
+        description="Статус магазинів"
+        onClick={onOpenStores}
+      />
+    )}
 
     {currentUser?.role === "owner" && (
       <MenuItem
