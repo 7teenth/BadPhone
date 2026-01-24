@@ -1,6 +1,6 @@
 ﻿{
     "name":  "bad-phone",
-    "version":  "1.0.8",
+    "version":  "1.0.9",
     "description":  "PWA Point of Sale application for small and medium businesses.",
     "author":  "Nikita Karvatskyi",
     "private":  true,

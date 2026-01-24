@@ -1,12 +1,12 @@
 # release.ps1
-# Полностью автоматический релиз с автоинкрементом патча
+# Fully automatic release with patch auto-increment
 
-# --- Получаем последнюю версию из package.json ---
+# --- Get the current version from package.json ---
 $jsonPath = "package.json"
 $content = Get-Content $jsonPath -Raw
 $json = $content | ConvertFrom-Json
 
-# --- Автоинкремент патча ---
+# --- Auto-increment patch version ---
 $versionParts = $json.version.Split('.')
 [int]$patch = [int]$versionParts[2]
 $patch++
@@ -15,47 +15,47 @@ $newVersion = ($versionParts -join ".")
 
 $json.version = $newVersion
 $json | ConvertTo-Json -Depth 10 | Set-Content $jsonPath -Encoding utf8
-Write-Host "Автообновленная версия: $newVersion"
+Write-Host "Auto-updated version: $newVersion"
 
-# --- Обновляем package-lock.json ---
-Write-Host "Обновляем package-lock.json..."
+# --- Update package-lock.json ---
+Write-Host "Updating package-lock.json..."
 npm install
 
-# --- Коммит изменений ---
-Write-Host "Создаём коммит с новой версией..."
+# --- Commit changes ---
+Write-Host "Creating commit with new version..."
 git add .
-git commit -m "feat: подготовка версии $newVersion"
+git commit -m "feat: prepare version $newVersion"
 
 $branch = git branch --show-current
-Write-Host "Пушим изменения на ветку $branch..."
+Write-Host "Pushing changes to branch $branch..."
 git push origin $branch
 
-# --- Работа с тегами ---
+# --- Handle Git tags ---
 if (git tag --list | Select-String "v$newVersion") {
-    Write-Host "Тег v$newVersion уже существует. Удаляем..."
+    Write-Host "Tag v$newVersion already exists. Deleting..."
     git tag -d v$newVersion
     git push origin :refs/tags/v$newVersion
 }
 
-Write-Host "Создаём тег v$newVersion..."
+Write-Host "Creating tag v$newVersion..."
 git tag v$newVersion
 git push origin v$newVersion
 
-# --- Сборка приложения ---
-Write-Host "Собираем приложение..."
+# --- Build the app ---
+Write-Host "Building the app..."
 npx electron-builder --win --x64 --publish always
 
-# --- Проверка артефактов ---
+# --- Check artifacts ---
 $artifacts = @(Get-ChildItem "dist/*.exe" -ErrorAction SilentlyContinue)
 
 if ($artifacts.Count -gt 0) {
-    Write-Host "Найдены артефакты:"
+    Write-Host "Found artifacts:"
     $artifacts | ForEach-Object { Write-Host "  - $($_.FullName)" }
 
     if (-not $env:GITHUB_TOKEN) {
-        Write-Host "`n⚠️ GITHUB_TOKEN не установлен, релиз на GitHub пропущен."
+        Write-Host "`n⚠️ GITHUB_TOKEN is not set, skipping GitHub release."
     } else {
-        Write-Host "`nСоздаём релиз на GitHub..."
+        Write-Host "`nCreating GitHub release..."
         $releaseArgs = @("scripts/create-github-release.js", "--version", $newVersion, "--draft", "false", "--prerelease", "false")
 
         foreach ($artifact in $artifacts) {
@@ -66,13 +66,13 @@ if ($artifacts.Count -gt 0) {
         node @releaseArgs
 
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "`n✅ Релиз v$newVersion создан на GitHub!"
+            Write-Host "`n✅ GitHub release v$newVersion created!"
         } else {
-            Write-Host "`n⚠️ Ошибка при создании релиза"
+            Write-Host "`n⚠️ Error creating GitHub release"
         }
     }
 } else {
-    Write-Host "`n⚠️ Артефакты не найдены в dist/"
+    Write-Host "`n⚠️ No artifacts found in dist/"
 }
 
-Write-Host "`n✅ Автоматический релиз v$newVersion завершён!"
+Write-Host "`n✅ Automatic release v$newVersion completed!"
