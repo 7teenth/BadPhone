@@ -1,34 +1,38 @@
-# release.ps1
-# Fully automated release script for Windows + PowerShell 5
+Param(
+    [string]$newVersion
+)
 
-# --- Auto-increment patch version ---
-$jsonPath = "package.json"
+# Файлы проекта
+$packageJson = "package.json"
+$packageLock = "package-lock.json"
+$distDir = "dist"
 
-# Read current version from package.json
-$content = Get-Content $jsonPath -Raw
-$json = $content | ConvertFrom-Json
-$versionParts = $json.version.Split('.')
-[int]$patch = [int]$versionParts[2]
-$patch++
-$newVersion = "$($versionParts[0]).$($versionParts[1]).$patch"
-
+# =========================
+# 1️⃣ Авто-инкремент версии
+# =========================
+if (-not $newVersion) {
+    $content = Get-Content $packageJson -Raw | ConvertFrom-Json
+    $verParts = $content.version.Split('.')
+    $verParts[2] = ([int]$verParts[2] + 1).ToString()
+    $newVersion = "$($verParts[0]).$($verParts[1]).$($verParts[2])"
+}
 Write-Host "Auto-updated version: $newVersion"
 
-# --- Update package.json via Node.js (no BOM, valid JSON) ---
-Write-Host "Updating package.json using Node.js..."
-node -e "
-const fs = require('fs');
-const p = 'package.json';
-const j = require('./' + p);
-j.version = '$newVersion';
-fs.writeFileSync(p, JSON.stringify(j, null, 2));
-"
+# =========================
+# 2️⃣ Обновление package.json и package-lock.json
+# =========================
+Write-Host "Updating package.json..."
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$json = Get-Content $packageJson -Raw | ConvertFrom-Json
+$json.version = $newVersion
+[System.IO.File]::WriteAllText($packageJson, ($json | ConvertTo-Json -Depth 10 -Compress), $utf8NoBom)
 
-# --- Update package-lock.json ---
 Write-Host "Updating package-lock.json..."
 npm install
 
-# --- Commit changes ---
+# =========================
+# 3️⃣ Создание коммита и пуш
+# =========================
 Write-Host "Creating commit with new version..."
 git add .
 git commit -m "feat: prepare version $newVersion"
@@ -37,7 +41,9 @@ $branch = git branch --show-current
 Write-Host "Pushing changes to branch $branch..."
 git push origin $branch
 
-# --- Handle Git tags ---
+# =========================
+# 4️⃣ Создание тега
+# =========================
 if (git tag --list | Select-String "v$newVersion") {
     Write-Host "Tag v$newVersion already exists. Deleting..."
     git tag -d v$newVersion
@@ -48,38 +54,49 @@ Write-Host "Creating tag v$newVersion..."
 git tag v$newVersion
 git push origin v$newVersion
 
-# --- Build Electron app ---
+# =========================
+# 5️⃣ Очистка старых билдов
+# =========================
+Write-Host "Cleaning old builds..."
+if (Test-Path $distDir) {
+    Get-ChildItem "$distDir\*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+    Get-ChildItem "$distDir\*.blockmap" -ErrorAction SilentlyContinue | Remove-Item -Force
+}
+
+# =========================
+# 6️⃣ Сборка Electron
+# =========================
 Write-Host "Building the app..."
-npx electron-builder --win --x64 --publish always
+npx electron-builder --win
 
-# --- Check build artifacts ---
-$artifacts = @(Get-ChildItem "dist/*.exe" -ErrorAction SilentlyContinue)
+$artifacts = @(Get-ChildItem "$distDir/*.exe" -ErrorAction SilentlyContinue)
 
-if ($artifacts.Count -gt 0) {
-    Write-Host "Found artifacts:"
-    $artifacts | ForEach-Object { Write-Host "  - $($_.FullName)" }
+if ($artifacts.Count -eq 0) {
+    Write-Host "`n⚠️ No build artifacts found in $distDir/"
+    exit 1
+}
 
-    # --- GitHub release ---
-    if (-not $env:GITHUB_TOKEN) {
-        Write-Host "`n⚠️ GITHUB_TOKEN is not set, skipping GitHub release."
+# =========================
+# 7️⃣ Публикация на GitHub (если токен есть)
+# =========================
+if ($env:GH_TOKEN -or $env:GITHUB_TOKEN) {
+    Write-Host "`nCreating GitHub release..."
+    $releaseArgs = @("scripts/create-github-release.js", "--version", $newVersion, "--draft", "false", "--prerelease", "false")
+    
+    foreach ($artifact in $artifacts) {
+        $releaseArgs += "--artifact"
+        $releaseArgs += $artifact.FullName
+    }
+    
+    node @releaseArgs
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "`n✅ GitHub release v$newVersion created successfully!"
     } else {
-        Write-Host "`nCreating GitHub release..."
-        $releaseArgs = @("scripts/create-github-release.js", "--version", $newVersion, "--draft", "false", "--prerelease", "false")
-        foreach ($artifact in $artifacts) {
-            $releaseArgs += "--artifact"
-            $releaseArgs += $artifact.FullName
-        }
-        node @releaseArgs
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "`n✅ GitHub release v$newVersion created!"
-        } else {
-            Write-Host "`n⚠️ Error creating GitHub release"
-        }
+        Write-Host "`n⚠️ Error while creating GitHub release"
     }
 } else {
-    Write-Host "`n⚠️ No artifacts found in dist/"
+    Write-Host "`n⚠️ GH_TOKEN or GITHUB_TOKEN is not set. Skipping GitHub release."
 }
 
 Write-Host "`n✅ Automatic release v$newVersion completed!"
-
