@@ -14,6 +14,10 @@ const versionFile = path.join(app.getPath("userData"), "version.txt"); // для
 
 // ------------------------- Создание главного окна -------------------------
 async function createWindow() {
+  const preloadPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar', 'electron', 'preload.js') // путь в сборке
+    : path.join(__dirname, 'preload.js'); // путь в dev
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -21,16 +25,16 @@ async function createWindow() {
     minHeight: 600,
     frame: true,
     autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-      enableRemoteModule: false,
-      webSecurity: true,
-    },
     icon: path.join(__dirname, "icon.png"),
     show: false,
     titleBarStyle: "default",
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: preloadPath,
+      enableRemoteModule: false,
+      webSecurity: true,
+    },
   });
 
   mainWindow.maximize();
@@ -42,6 +46,8 @@ async function createWindow() {
     await startLocalServer();
     startUrl = `http://localhost:${PORT}`;
   }
+
+  console.log('Preload path:', preloadPath); // для проверки пути
 
   mainWindow.loadURL(startUrl);
 
@@ -79,18 +85,10 @@ async function createWindow() {
   }
 
   // Listen to updater commands from renderer
-  ipcMain.on('updater:check', () => {
-    try { autoUpdater.checkForUpdates(); } catch (e) { console.warn('updater:check failed', e); }
-  });
-  ipcMain.on('updater:download', () => {
-    try { autoUpdater.downloadUpdate(); } catch (e) { console.warn('updater:download failed', e); }
-  });
-  ipcMain.on('updater:install', () => {
-    try { autoUpdater.quitAndInstall(); } catch (e) { console.warn('updater:install failed', e); }
-  });
-  ipcMain.on('updater:skip', () => {
-    console.log('Renderer requested skip update');
-  });
+  ipcMain.on('updater:check', () => { try { autoUpdater.checkForUpdates(); } catch (e) { console.warn(e); } });
+  ipcMain.on('updater:download', () => { try { autoUpdater.downloadUpdate(); } catch (e) { console.warn(e); } });
+  ipcMain.on('updater:install', () => { try { autoUpdater.quitAndInstall(); } catch (e) { console.warn(e); } });
+  ipcMain.on('updater:skip', () => { console.log('Renderer requested skip update'); });
 
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription) => {
     console.error("Failed to load:", errorCode, errorDescription);
@@ -102,9 +100,9 @@ async function createWindow() {
     }
   });
 
-  // Показываем "Что нового" если версия изменилась
   showWhatsNewIfUpdated();
 }
+
 
 // ------------------------- Меню -------------------------
 function createMenu() {

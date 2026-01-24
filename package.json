@@ -1,6 +1,6 @@
-{
+﻿{
     "name":  "bad-phone",
-    "version":  "1.0.7",
+    "version":  "1.0.8",
     "description":  "PWA Point of Sale application for small and medium businesses.",
     "author":  "Nikita Karvatskyi",
     "private":  true,
@@ -14,7 +14,7 @@
                     "build:static":  "cross-env STATIC_EXPORT=true next build",
                     "electron":  "electron .",
                     "electron-dev":  "concurrently \"npm run dev\" \"wait-on http://localhost:3000 \u0026\u0026 electron .\"",
-                    "dist":  "npm run clean \u0026\u0026 npm run build:static \u0026\u0026 electron-builder --publish=never",
+                    "dist":  "npm run clean \u0026\u0026 npm run build:static \u0026\u0026 electron-builder --publish=always",
                     "start":  "electron .",
                     "migrate":  "node ./scripts/run-migrations.js",
                     "e2e:terminal-sale":  "node ./scripts/e2e-simulate-terminal-sale.js",
@@ -117,7 +117,7 @@
                   "files":  [
                                 ".next/**/*",
                                 "out/**/*",
-                                "electron/main.js",
+                                "electron/**/*",
                                 "package.json",
                                 "node_modules/**/minimatch/**/*"
                             ],
@@ -131,7 +131,8 @@
                                   {
                                       "provider":  "github",
                                       "owner":  "7teenth",
-                                      "repo":  "BadPhone"
+                                      "repo":  "BadPhone",
+                                      "releaseType":  "draft"
                                   }
                               ],
                   "win":  {
