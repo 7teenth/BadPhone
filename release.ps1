@@ -4,7 +4,6 @@ Param(
 
 # Файлы проекта
 $packageJson = "package.json"
-$packageLock = "package-lock.json"
 $distDir = "dist"
 
 # =========================
