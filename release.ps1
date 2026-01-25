@@ -1,101 +1,119 @@
-Param(
+﻿Param(
     [string]$newVersion
 )
 
-# Файлы проекта
+# Пути
 $packageJson = "package.json"
 $distDir = "dist"
+$loginPagePath = "app/components/auth/login-page.tsx" # путь к файлу, где отображается версия
 
 # =========================
-# 1️⃣ Авто-инкремент версии
+# 1️⃣ Получаем последний тег и формируем версию
 # =========================
 if (-not $newVersion) {
-    $content = Get-Content $packageJson -Raw | ConvertFrom-Json
-    $verParts = $content.version.Split('.')
-    $verParts[2] = ([int]$verParts[2] + 1).ToString()
+    $tags = git tag --list "v*" | Where-Object { $_ -match "^v\d+\.\d+\.\d+$" } | Sort-Object { [version]($_.TrimStart('v')) }
+    $lastTag = if ($tags) { $tags[-1] } else { "v1.0.0" }
+
+    $verParts = $lastTag.TrimStart("v").Split(".")
+    $verParts[2] = ([int]$verParts[2] + 1).ToString() # инкремент патча
     $newVersion = "$($verParts[0]).$($verParts[1]).$($verParts[2])"
 }
-Write-Host "Auto-updated version: $newVersion"
+
+Write-Host "📦 Releasing version: $newVersion"
 
 # =========================
-# 2️⃣ Обновление package.json и package-lock.json
+# 2️⃣ Обновляем package.json и package-lock.json
 # =========================
-Write-Host "Updating package.json..."
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $json = Get-Content $packageJson -Raw | ConvertFrom-Json
 $json.version = $newVersion
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($packageJson, ($json | ConvertTo-Json -Depth 10 -Compress), $utf8NoBom)
 
-Write-Host "Updating package-lock.json..."
+Write-Host "✅ package.json updated"
+
 npm install
 
 # =========================
-# 3️⃣ Создание коммита и пуш
+# 3️⃣ Обновляем версию на странице логина
 # =========================
-Write-Host "Creating commit with new version..."
-git add .
-git commit -m "feat: prepare version $newVersion"
+if (Test-Path $loginPagePath) {
+    (Get-Content $loginPagePath) |
+        ForEach-Object { $_ -replace 'Версія\s+\d+\.\d+\.\d+', "Версія $newVersion" } |
+        Set-Content -Encoding utf8 $loginPagePath
+    Write-Host "✅ Login page version updated"
+}
+
+# =========================
+# 4️⃣ Коммитим изменения и пушим
+# =========================
+git add $packageJson, $loginPagePath
+git commit -m "chore: bump version to $newVersion"
 
 $branch = git branch --show-current
-Write-Host "Pushing changes to branch $branch..."
 git push origin $branch
 
 # =========================
-# 4️⃣ Создание тега
+# 5️⃣ Создаем тег
 # =========================
 if (git tag --list | Select-String "v$newVersion") {
-    Write-Host "Tag v$newVersion already exists. Deleting..."
     git tag -d v$newVersion
     git push origin :refs/tags/v$newVersion
 }
-
-Write-Host "Creating tag v$newVersion..."
 git tag v$newVersion
 git push origin v$newVersion
+Write-Host "✅ Git tag v$newVersion created"
 
 # =========================
-# 5️⃣ Очистка старых билдов
+# 6️⃣ Очищаем старые билды
 # =========================
-Write-Host "Cleaning old builds..."
 if (Test-Path $distDir) {
-    Get-ChildItem "$distDir\*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
-    Get-ChildItem "$distDir\*.blockmap" -ErrorAction SilentlyContinue | Remove-Item -Force
+    Remove-Item $distDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "✅ Old dist folder cleared"
 }
 
 # =========================
-# 6️⃣ Сборка Electron
+# 7️⃣ Сборка Next.js с env
 # =========================
-Write-Host "Building the app..."
-npx electron-builder --win
+Write-Host "🚀 Building Next.js static export..."
 
-$artifacts = @(Get-ChildItem "$distDir/*.exe" -ErrorAction SilentlyContinue)
-
-if ($artifacts.Count -eq 0) {
-    Write-Host "`n⚠️ No build artifacts found in $distDir/"
-    exit 1
+# Загружаем переменные из .env.local
+$envFile = ".env.local"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match "^\s*([^#=]+)=(.+)$") {
+            $name = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+    }
 }
 
+# NEXT_PUBLIC_APP_VERSION доступно для фронтенда
+$env:NEXT_PUBLIC_APP_VERSION = $newVersion
+
+npm run build:static
+
 # =========================
-# 7️⃣ Публикация на GitHub (если токен есть)
+# 8️⃣ Сборка Electron
+# =========================
+Write-Host "🚀 Building Electron app..."
+npx electron-builder --win --publish never
+
+# =========================
+# 9️⃣ Публикация на GitHub
 # =========================
 if ($env:GH_TOKEN -or $env:GITHUB_TOKEN) {
-    Write-Host "`nCreating GitHub release..."
+    Write-Host "📤 Publishing release on GitHub..."
+    $artifacts = Get-ChildItem "$distDir/*.exe" -ErrorAction SilentlyContinue
+    if ($artifacts.Count -eq 0) { Write-Host "⚠️ No artifacts found"; exit 1 }
+
     $releaseArgs = @("scripts/create-github-release.js", "--version", $newVersion, "--draft", "false", "--prerelease", "false")
-    
     foreach ($artifact in $artifacts) {
         $releaseArgs += "--artifact"
         $releaseArgs += $artifact.FullName
     }
-    
-    node @releaseArgs
 
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "`n✅ GitHub release v$newVersion created successfully!"
-    } else {
-        Write-Host "`n⚠️ Error while creating GitHub release"
-    }
-} else {
-    Write-Host "`n⚠️ GH_TOKEN or GITHUB_TOKEN is not set. Skipping GitHub release."
+    node @releaseArgs
 }
 
-Write-Host "`n✅ Automatic release v$newVersion completed!"
+Write-Host "`n✅ Release v$newVersion completed!"
