@@ -231,17 +231,7 @@ function cmdPublish() {
       cmd.push(`"${changelog}"`);
     }
 
-    // Добавляем артефакты если указаны
-    if (args.artifacts) {
-      const artifactFiles = execSync(`dir /b ${args.artifacts}`, {
-        encoding: "utf-8",
-      }).trim().split("\n");
 
-      artifactFiles.forEach((file) => {
-        cmd.push("--artifact");
-        cmd.push(file);
-      });
-    }
 
     console.log("🔄 Выполняем команду...");
     execSync(cmd.join(" "), { stdio: "inherit" });
