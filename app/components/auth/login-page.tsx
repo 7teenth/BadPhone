@@ -224,7 +224,7 @@ export default function LoginPage() {
           </form>
 
           <div className="pt-4 text-center text-xs text-zinc-500 border-t border-zinc-800">
-            Версія {process.env.NEXT_PUBLIC_APP_VERSION} · © 2025 BadPhone
+            Версія {process.env.NEXT_PUBLIC_APP_VERSION} · © 2026 BadPhone
           </div>
         </CardContent>
       </Card>
